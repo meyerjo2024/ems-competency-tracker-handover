@@ -1,0 +1,233 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ========================================
+    // USERS COLLECTION - MUST BE FIRST
+    // ========================================
+    match /users/{userId} {
+      // All authenticated users can read any user profile
+      // This is needed for role checks in other rules
+      allow read: if request.auth != null;
+      
+      // Users can create their own profile (during registration)
+      allow create: if request.auth != null 
+                    && request.auth.uid == userId;
+      
+      // Users can update their own profile, BUT NOT their role or email
+      // Admins can update approved field (but NOT role or email)
+      allow update: if request.auth != null 
+                    && (
+                      // Users can update own (not role/email)
+                      (request.auth.uid == userId
+                       && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'email']))
+                      // OR Admins can update any (including approved, but not role/email)
+                      || (isAdmin() 
+                          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'email']))
+                    );
+      
+      // Only prevent deletes for now
+      allow delete: if false;
+    }
+    
+    // ========================================
+    // HELPER FUNCTIONS
+    // ========================================
+    
+    // Get user's role from their profile
+    function getUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+    
+    // Check if user is an Instructor
+    function isInstructor() {
+      return request.auth != null && getUserRole() == 'Instructor';
+    }
+    
+    // Check if user is an Administrator
+    function isAdmin() {
+      return request.auth != null && getUserRole() == 'Administrator';
+    }
+    
+    // Check if user is Instructor or Administrator
+    function isInstructorOrAdmin() {
+      return isInstructor() || isAdmin();
+    }
+    
+    // Check if user is a Student
+    function isStudent() {
+      return request.auth != null && getUserRole() == 'Student';
+    }
+    
+    // Get user's approval status
+    function getUserApproved() {
+      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      return userDoc.data.approved == true;
+    }
+    
+    // Check if instructor is approved
+    function isApprovedInstructor() {
+      return isInstructor() && getUserApproved();
+    }
+    
+    // ========================================
+    // SHIFTS COLLECTION
+    // ========================================
+    match /shifts/{shiftId} {
+      // All authenticated users can read shifts
+      allow read: if request.auth != null;
+      
+      // Only Instructors and Admins can create shifts
+      // Instructors must be approved
+      allow create: if (isApprovedInstructor() || isAdmin())
+                    && request.resource.data.instructorId == request.auth.uid;
+      
+      // Shift owner can update their shift
+      // OR students can update ONLY the bookedCount field (for booking/canceling)
+      allow update: if request.auth != null
+                    && (
+                      // Owner can update anything
+                      resource.data.instructorId == request.auth.uid
+                      // OR students can ONLY update bookedCount
+                      || (isStudent() 
+                          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['bookedCount'])
+                         )
+                    );
+      
+      // Only the shift owner or admin can delete
+      allow delete: if request.auth != null
+                    && (resource.data.instructorId == request.auth.uid || isAdmin());
+    }
+    
+    // ========================================
+    // SHIFT BOOKINGS COLLECTION
+    // ========================================
+    match /shiftBookings/{bookingId} {
+      // Students can read their own bookings
+      // Instructors and admins can read all
+      allow read: if request.auth != null 
+                  && (resource.data.studentId == request.auth.uid 
+                      || isInstructorOrAdmin());
+      
+      // Students can create bookings for themselves (initial status: 'Booked')
+      allow create: if isStudent()
+                    && request.resource.data.studentId == request.auth.uid
+                    && request.resource.data.status == 'Booked';
+      
+      // Students can update their own bookings (including status changes)
+      // Allowed status transitions for students:
+      //   'Booked' -> 'CancelledByStudent' (cancel booking)
+      //   'Booked' -> 'Attended' (submit for review)
+      // Instructors can update any booking (e.g., 'Attended' -> 'Reviewed')
+      allow update: if request.auth != null
+                    && (
+                      // Student updating own booking
+                      (resource.data.studentId == request.auth.uid
+                       && canStudentUpdateBooking())
+                      // OR instructor/admin can update any
+                      || isInstructorOrAdmin()
+                    );
+      
+      // Only students can delete their own bookings, instructors/admins can delete any
+      allow delete: if request.auth != null
+                    && (resource.data.studentId == request.auth.uid 
+                        || isInstructorOrAdmin());
+    }
+    
+    // Helper to validate student booking status changes
+    function canStudentUpdateBooking() {
+      let oldStatus = resource.data.status;
+      let newStatus = request.resource.data.status;
+      // Students can only transition from 'Booked' to 'CancelledByStudent' or 'Attended'
+      return (oldStatus == 'Booked' && (newStatus == 'CancelledByStudent' || newStatus == 'Attended'));
+    }
+    
+    // ========================================
+    // ENCOUNTERS COLLECTION
+    // ========================================
+    match /encounters/{encounterId} {
+      // Students can read their own, instructors can read all
+      allow read: if request.auth != null
+                  && (resource.data.studentId == request.auth.uid 
+                      || isInstructorOrAdmin());
+      
+      // Students can create encounters for themselves
+      allow create: if isStudent()
+                    && request.resource.data.studentId == request.auth.uid;
+      
+      // Students can update own DRAFT encounters (only their own fields)
+      // Instructors can update to add optional feedback fields
+      allow update: if request.auth != null
+                    && (
+                      // Students can update their own DRAFT encounters
+                      (resource.data.studentId == request.auth.uid 
+                       && resource.data.isDraft == true
+                       && onlyUpdatesStudentFields())
+                      ||
+                      // Instructors can add feedback to encounters from their shifts
+                      (isInstructorOrAdmin() 
+                       && canInstructorAccessEncounterForUpdate()
+                       && onlyUpdatesFeedbackFields())
+                      ||
+                      // Admins can update anything
+                      isAdmin()
+                    );
+      
+      // Students can delete their own DRAFT encounters, only admins can delete submitted ones
+      allow delete: if request.auth != null
+                    && ((resource.data.studentId == request.auth.uid 
+                         && resource.data.isDraft == true)
+                        || isAdmin());
+    }
+    
+    // Helper function to check instructor can access encounter (for updates)
+    function canInstructorAccessEncounterForUpdate() {
+      let shift = get(/databases/$(database)/documents/shifts/$(resource.data.shiftId));
+      return shift.data.instructorId == request.auth.uid;
+    }
+    
+    // Helper to ensure instructors only update feedback fields
+    function onlyUpdatesFeedbackFields() {
+      let allowedFields = ['instructorFeedback', 'reviewedByInstructorId', 'reviewedAt', 'updatedAt'];
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowedFields);
+    }
+    
+    // Helper to ensure students only update their own fields (not feedback)
+    function onlyUpdatesStudentFields() {
+      let forbiddenFields = ['studentId', 'reviewedByInstructorId'];
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(forbiddenFields);
+    }
+    
+    // ========================================
+    // SHIFT FEEDBACK COLLECTION (PER-STUDENT)
+    // ========================================
+    match /shiftFeedback/{feedbackId} {
+      // Students can read feedback about them, instructors can read all
+      allow read: if request.auth != null
+                  && (resource.data.studentId == request.auth.uid 
+                      || resource.data.instructorId == request.auth.uid
+                      || isAdmin());
+      
+      // Only Instructors and Admins can create feedback
+      // Instructors must be approved
+      // MUST include studentId and overallFeedback (per-student feedback)
+      allow create: if (isApprovedInstructor() || isAdmin())
+                    && request.resource.data.instructorId == request.auth.uid
+                    && request.resource.data.studentId is string
+                    && request.resource.data.studentId.size() > 0
+                    && request.resource.data.overallFeedback is string
+                    && request.resource.data.overallFeedback.size() > 0;
+      
+      // Can update own feedback (must maintain studentId and overallFeedback requirements)
+      allow update: if request.auth != null
+                    && (resource.data.instructorId == request.auth.uid || isAdmin())
+                    && request.resource.data.studentId is string
+                    && request.resource.data.studentId.size() > 0
+                    && request.resource.data.overallFeedback is string
+                    && request.resource.data.overallFeedback.size() > 0;
+      
+      // Only admins can delete
+      allow delete: if isAdmin();
+    }
+  }
+}
