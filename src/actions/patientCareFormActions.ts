@@ -2,7 +2,7 @@
 // Server actions don't have access to Firebase Auth tokens
 // AI functions are in separate aiActions.ts file
 
-import type { PatientCareFormData } from '@/types';
+import type { PatientCareFormData, UCAPSkill } from '@/types';
 import { getExtractedSkills } from '@/actions/aiActions';
 import { firestore } from '@/lib/firebase/config';
 import { collection, addDoc, updateDoc, doc, serverTimestamp, getDoc, getDocs, query, where, orderBy, deleteDoc } from 'firebase/firestore';
@@ -35,7 +35,7 @@ function removeUndefinedDeep(obj: any): any {
   return obj;
 }
 
-export async function savePatientCareForm(formData: PatientCareFormData): Promise<{ success: boolean; data?: PatientCareFormData; error?: string; skills?: string[] }> {
+export async function savePatientCareForm(formData: PatientCareFormData): Promise<{ success: boolean; data?: PatientCareFormData; error?: string; skills?: UCAPSkill[] }> {
   console.log('Saving Patient Care Form (draft or final):', formData);
 
   // Validate required fields
@@ -43,10 +43,37 @@ export async function savePatientCareForm(formData: PatientCareFormData): Promis
     return { success: false, error: 'Shift ID and Student ID are required.' };
   }
 
-  // Remove undefined fields recursively (Firestore doesn't accept undefined)
-  const cleanFormData = removeUndefinedDeep(formData) as PatientCareFormData;
-
   try {
+    let extractedSkills: UCAPSkill[] | undefined = undefined;
+    let extractionError: string | undefined = undefined;
+    let ucapSkillsForEncounter = formData.ucapSkills;
+
+    // If submitting (not just saving draft), attempt to extract canonical UCAP skills
+    if (!formData.isDraft) {
+      try {
+        const patientEncounterDescription =
+          `${formData.casePresentation || ''} ${formData.patientAssessmentNarrative || ''}`.trim();
+
+        if (patientEncounterDescription) {
+          const skillsResult = await getExtractedSkills(patientEncounterDescription);
+          if (skillsResult.skills) {
+            ucapSkillsForEncounter = skillsResult.skills;
+            extractedSkills = skillsResult.skills;
+            console.log('Extracted UCAP Skills:', extractedSkills.map((skill) => skill.name));
+          }
+        }
+      } catch (error) {
+        console.error('Error extracting skills:', error);
+        extractionError = 'Form saved, but skill extraction failed.';
+      }
+    }
+
+    // Remove undefined fields recursively (Firestore doesn't accept undefined)
+    const cleanFormData = removeUndefinedDeep({
+      ...formData,
+      ucapSkills: ucapSkillsForEncounter,
+    }) as PatientCareFormData;
+
     const encountersCollection = collection(firestore, 'encounters');
     let encounterId = cleanFormData.id;
     
@@ -87,27 +114,7 @@ export async function savePatientCareForm(formData: PatientCareFormData): Promis
 
     const savedData = { ...formData, id: encounterId, submittedAt: new Date() };
 
-    // If submitting (not just saving draft), attempt to extract skills
-    if (!formData.isDraft) {
-    try {
-      const patientEncounterDescription = 
-        `${formData.casePresentation || ''} ${formData.patientAssessmentNarrative || ''}`.trim();
-
-      if (patientEncounterDescription) {
-          const skillsResult = await getExtractedSkills(patientEncounterDescription);
-          if (skillsResult.skills) {
-            console.log('Extracted Skills:', skillsResult.skills);
-            return { success: true, data: savedData, skills: skillsResult.skills };
-          }
-      }
-    } catch (error) {
-      console.error('Error extracting skills:', error);
-      // Proceed with saving form data even if skill extraction fails
-      return { success: true, data: savedData, error: 'Form saved, but skill extraction failed.' };
-    }
-  }
-  
-  return { success: true, data: savedData };
+    return { success: true, data: savedData, skills: extractedSkills, error: extractionError };
   } catch (error: any) {
     console.error('Error saving encounter to Firestore:', error);
     return { success: false, error: error.message || 'Failed to save encounter.' };

@@ -21,7 +21,10 @@ import { useAuth } from '@/context/AuthContext';
 import { getShiftBookingsForStudent } from '@/actions/bookingActions';
 import { getAllAvailableShifts } from '@/actions/shiftActions';
 import { getAllFeedbacksForStudent } from '@/actions/shiftFeedbackActions';
-import type { Shift, ShiftBooking, PatientCareFormData, ShiftFeedback } from '@/types';
+import { getUCAPSkillsForStudent } from '@/actions/ucapSkillsActions';
+import { ProgressSummary } from '@/components/dashboard/student/ProgressSummary';
+import { SkillsBreakdown } from '@/components/dashboard/student/SkillsBreakdown';
+import type { Shift, ShiftBooking, PatientCareFormData, ShiftFeedback, UCAPSkillProgressSummary } from '@/types';
 import { isFuture, isToday, parseISO, format } from 'date-fns';
 
 export interface PopulatedShiftBooking extends ShiftBooking {
@@ -40,6 +43,7 @@ export default function StudentDashboardPage() {
     reviewedShifts: 0
   });
   const [isLoading, setIsLoading] = React.useState(true);
+  const [skillProgress, setSkillProgress] = React.useState<UCAPSkillProgressSummary | null>(null);
 
   React.useEffect(() => {
     async function fetchDashboardData() {
@@ -51,9 +55,10 @@ export default function StudentDashboardPage() {
       setIsLoading(true);
       try {
         // Fetch bookings and shifts
-        const [bookings, allShifts] = await Promise.all([
+        const [bookings, allShifts, skillsResult] = await Promise.all([
           getShiftBookingsForStudent(currentUser.id),
-          getAllAvailableShifts()
+          getAllAvailableShifts(),
+          getUCAPSkillsForStudent(currentUser.id),
         ]);
 
         // Populate bookings with shift details
@@ -97,6 +102,8 @@ export default function StudentDashboardPage() {
         }).slice(0, 5);
 
         setRecentEncounters(sortedEncounters);
+
+        setSkillProgress(skillsResult.success && skillsResult.progress ? skillsResult.progress : null);
 
         // Fetch feedback
         try {
@@ -288,6 +295,11 @@ export default function StudentDashboardPage() {
             )}
           </CardContent>
         </Card>
+      </div>
+
+      <div className="grid gap-6 md:grid-cols-2">
+        <ProgressSummary progress={skillProgress} />
+        <SkillsBreakdown progress={skillProgress} />
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">

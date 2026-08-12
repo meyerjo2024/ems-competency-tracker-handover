@@ -5,7 +5,8 @@
 
 import { extractSkillsFromEncounter, type ExtractSkillsFromEncounterInput } from '@/ai/flows/extract-skills-from-encounter';
 import { suggestCasePresentation, type SuggestCasePresentationInput } from '@/ai/flows/suggest-case-presentation';
-import type { PatientCareFormData } from '@/types';
+import type { PatientCareFormData, UCAPSkill } from '@/types';
+import { buildUCAPSkillsFromExtractedNames, mergeUCAPSkills } from '@/lib/ucapSkills';
 
 /**
  * Generate suggested narrative for case presentation or patient assessment
@@ -47,17 +48,16 @@ export async function generateSuggestedNarrative(
  * Extract skills from patient encounter description
  * This calls the Genkit AI flow to analyze narrative and extract skills
  */
-export async function getExtractedSkills(patientEncounterDescription: string): Promise<{ skills?: string[]; error?: string }> {
+export async function getExtractedSkills(patientEncounterDescription: string): Promise<{ skills?: UCAPSkill[]; error?: string }> {
   if (!patientEncounterDescription.trim()) {
     return { error: "Encounter description is empty." };
   }
   try {
     const input: ExtractSkillsFromEncounterInput = { patientEncounterDescription };
     const result = await extractSkillsFromEncounter(input);
-    return { skills: result.extractedSkills };
+    return { skills: mergeUCAPSkills(buildUCAPSkillsFromExtractedNames(result.extractedSkills)) };
   } catch (error) {
     console.error('Error extracting skills directly:', error);
     return { error: 'Failed to extract skills.' };
   }
 }
-
