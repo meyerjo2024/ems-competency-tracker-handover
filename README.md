@@ -79,6 +79,38 @@ This project represents work completed up to the point of development halt. The 
 4. Deploy Firebase security rules
 5. Start development server
 
+## Docker Usage
+
+1. Copy and configure environment variables:
+   ```bash
+   cp .env.example .env
+   ```
+2. Build and run as a single container:
+   ```bash
+   docker build -t ems-competency-tracker:latest .
+   docker run --rm -p 3000:3000 --env-file .env ems-competency-tracker:latest
+   ```
+3. Use Docker Compose (production-like local orchestration):
+   ```bash
+   docker compose up -d --build
+   docker compose down
+   ```
+   By default Compose serves on port `3000` (set `HOST_PORT` in `.env` to change the host-side port).
+4. Export image and run on another host:
+   ```bash
+   docker save ems-competency-tracker:latest -o ems-competency-tracker.tar
+   # transfer tar file to target host
+   docker load -i ems-competency-tracker.tar
+   docker run --rm -p 3000:3000 --env-file .env ems-competency-tracker:latest
+   ```
+
+### First-run note
+- This app uses Firebase (not a local SQL database). Ensure your Firebase project is created and all required env vars are set before first run.
+- Deploy Firestore rules/indexes at least once before production use:
+  ```bash
+  firebase deploy --only firestore:rules,firestore:indexes
+  ```
+
 ### Important Notes
 - You will need to create your own Firebase project
 - All environment variables must be configured with your values

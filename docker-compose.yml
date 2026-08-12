@@ -1,0 +1,15 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ems-competency-tracker:latest
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 3000
+    ports:
+      - "${HOST_PORT:-3000}:3000"
+    restart: unless-stopped
