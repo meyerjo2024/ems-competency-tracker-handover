@@ -369,9 +369,11 @@ function InstructorShiftDetailContent() {
                             <CheckCircle2 className="h-4 w-4" />
                             <AlertDescription>
                               Feedback saved on {format(
-                                typeof feedback.createdAt === 'string'
-                                  ? new Date(feedback.createdAt)
-                                  : feedback.createdAt?.toDate?.() || new Date(feedback.createdAt),
+                                feedback.createdAt instanceof Date
+                                  ? feedback.createdAt
+                                  : feedback.createdAt
+                                    ? new Date(feedback.createdAt)
+                                    : new Date(),
                                 'MMM dd, yyyy HH:mm'
                               )}
                             </AlertDescription>

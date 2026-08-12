@@ -40,7 +40,7 @@ See **PROJECT_STATUS.md** for detailed feature breakdown.
 
 ### 2. Set Up Development Environment
 - Follow **SETUP.md** for installation
-- Create your own Firebase project (see **FIREBASE_SETUP_GUIDE.md**)
+- Create your own Firebase project (see **SUPABASE_SETUP_GUIDE.md**)
 - Configure environment variables
 - Test locally
 
@@ -97,7 +97,7 @@ ems-competency-tracker-handover/
 ├── SETUP.md                  # Installation instructions
 ├── DEPLOYMENT.md             # Deployment guide
 ├── USER_GUIDE.md             # End-user documentation
-├── FIREBASE_SETUP_GUIDE.md   # Firebase setup
+├── SUPABASE_SETUP_GUIDE.md   # Firebase setup
 ├── .env.local.example        # Environment template
 └── src/                      # Application code
 ```

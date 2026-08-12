@@ -1,15 +1,42 @@
-// src/actions/shiftActions.ts
-// NOTE: These are NOT server actions - they run on the client to preserve auth context
-// Server actions don't have access to Firebase Auth tokens
-
-import { firestore } from '@/lib/firebase/config';
-import type { Shift, FirestoreShift, ClientShift } from '@/types';
-import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, query, serverTimestamp, updateDoc, where, writeBatch } from 'firebase/firestore';
-import { transformShiftToClient, transformShiftsToClient } from '@/types';
+import { supabase } from '@/lib/supabase/config';
+import type { Shift, ClientShift } from '@/types';
 
 interface CreateShiftInput extends Omit<Shift, 'id' | 'createdAt' | 'updatedAt' | 'instructorId' | 'bookedCount'> {}
-
 interface UpdateShiftInput extends Partial<CreateShiftInput> {}
+
+type ShiftRow = {
+  id: string;
+  title: string;
+  date: string;
+  start_time: string;
+  end_time: string;
+  type: string;
+  location: string;
+  instructor_id: string;
+  capacity: number;
+  booked_count: number;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+function mapShift(row: ShiftRow): ClientShift {
+  return {
+    id: row.id,
+    title: row.title,
+    date: row.date,
+    startTime: row.start_time,
+    endTime: row.end_time,
+    type: row.type,
+    location: row.location,
+    capacity: row.capacity,
+    notes: row.notes ?? '',
+    instructorId: row.instructor_id,
+    bookedCount: row.booked_count,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
 
 export async function createShift(
   shiftData: CreateShiftInput,
@@ -20,23 +47,27 @@ export async function createShift(
   }
 
   try {
-    const shiftToSave: Omit<FirestoreShift, 'id' | 'bookedCount'> = {
-      ...shiftData,
-      instructorId,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-      notes: shiftData.notes || '', // Ensure notes is always a string
-    };
+    const { data, error } = await supabase
+      .from('shifts')
+      .insert({
+        title: shiftData.title,
+        date: shiftData.date,
+        start_time: shiftData.startTime,
+        end_time: shiftData.endTime,
+        type: shiftData.type,
+        location: shiftData.location,
+        instructor_id: instructorId,
+        capacity: shiftData.capacity,
+        booked_count: 0,
+        notes: shiftData.notes || '',
+      })
+      .select('id')
+      .single();
 
-    const shiftsCollection = collection(firestore, 'shifts');
-    const docRef = await addDoc(shiftsCollection, {
-      ...shiftToSave,
-      bookedCount: 0, // Initialize bookedCount
-    });
-    
-    return { success: true, shiftId: docRef.id };
+    if (error) throw error;
+
+    return { success: true, shiftId: data.id };
   } catch (error: any) {
-    console.error('Error creating shift:', error.message);
     return { success: false, error: error.message || 'Failed to create shift.' };
   }
 }
@@ -50,38 +81,31 @@ export async function updateShift(
     return { success: false, error: 'Shift ID is required for update.' };
   }
   if (!instructorId) {
-    return { success: false, error: 'Instructor ID is required for update authorization.' }
+    return { success: false, error: 'Instructor ID is required for update authorization.' };
   }
 
   try {
-    const shiftRef = doc(firestore, 'shifts', shiftId);
-    // Note: Consider adding instructor ownership verification for enhanced security
+    const dataToUpdate: Record<string, unknown> = {};
 
-    const dataToUpdate: Record<string, any> = {
-      ...shiftData,
-      updatedAt: serverTimestamp(),
-    };
+    if (shiftData.title !== undefined) dataToUpdate.title = shiftData.title;
+    if (shiftData.date !== undefined) dataToUpdate.date = shiftData.date;
+    if (shiftData.startTime !== undefined) dataToUpdate.start_time = shiftData.startTime;
+    if (shiftData.endTime !== undefined) dataToUpdate.end_time = shiftData.endTime;
+    if (shiftData.type !== undefined) dataToUpdate.type = shiftData.type;
+    if (shiftData.location !== undefined) dataToUpdate.location = shiftData.location;
+    if (shiftData.capacity !== undefined) dataToUpdate.capacity = shiftData.capacity;
+    if (shiftData.notes !== undefined) dataToUpdate.notes = shiftData.notes || '';
 
-    // Handle date conversion if it exists
-    if (shiftData.date) {
-      const dateValue = shiftData.date as unknown;
-      if (dateValue && typeof dateValue === 'object' && 'toISOString' in dateValue) {
-        dataToUpdate.date = (dateValue as Date).toISOString().split('T')[0];
-      } else if (typeof dateValue === 'string') {
-        dataToUpdate.date = dateValue;
-      }
-    }
+    const { error } = await supabase
+      .from('shifts')
+      .update(dataToUpdate)
+      .eq('id', shiftId)
+      .eq('instructor_id', instructorId);
 
-    // Ensure notes is always a string if it exists
-    if ('notes' in shiftData) {
-      dataToUpdate.notes = shiftData.notes || '';
-    }
+    if (error) throw error;
 
-    await updateDoc(shiftRef, dataToUpdate);
-    console.log("Shift updated with ID:", shiftId);
     return { success: true };
   } catch (error: any) {
-    console.error('Error updating shift in Firestore:', error);
     return { success: false, error: error.message || 'Failed to update shift.' };
   }
 }
@@ -92,91 +116,72 @@ export async function deleteShift(shiftId: string): Promise<{ success: boolean; 
   }
 
   try {
-    const shiftRef = doc(firestore, 'shifts', shiftId);
-    await deleteDoc(shiftRef);
-    console.log("Shift deleted with ID:", shiftId);
+    const { error } = await supabase.from('shifts').delete().eq('id', shiftId);
+    if (error) throw error;
     return { success: true };
   } catch (error: any) {
-    console.error('Error deleting shift from Firestore:', error);
     return { success: false, error: error.message || 'Failed to delete shift.' };
   }
 }
 
 export async function getAllAvailableShifts(): Promise<ClientShift[]> {
   try {
-    const shiftsCollection = collection(firestore, 'shifts');
     const today = new Date().toISOString().split('T')[0];
-    
-    // Query for shifts that:
-    // 1. Have not reached capacity (bookedCount < capacity)
-    // 2. Are in the future or today
-    const q = query(
-      shiftsCollection,
-      where("date", ">=", today)
-    );
-    
-    const shiftsSnapshot = await getDocs(q);
-    const shiftsList = shiftsSnapshot.docs
-      .map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-      } as FirestoreShift))
-      .filter(shift => shift.bookedCount < shift.capacity); // Filter out fully booked shifts
-    
-    return transformShiftsToClient(shiftsList);
-  } catch (error) {
-    console.error("Error fetching all available shifts:", error);
+
+    const { data, error } = await supabase
+      .from('shifts')
+      .select('id, title, date, start_time, end_time, type, location, instructor_id, capacity, booked_count, notes, created_at, updated_at')
+      .gte('date', today)
+      .order('date', { ascending: true });
+
+    if (error) throw error;
+
+    return (data ?? [])
+      .map((row) => row as ShiftRow)
+      .filter((shift) => shift.booked_count < shift.capacity)
+      .map(mapShift);
+  } catch {
     return [];
   }
 }
 
 export async function getShiftsForInstructor(instructorId: string): Promise<ClientShift[]> {
   if (!instructorId) {
-    console.warn("getShiftsForInstructor called without instructorId");
     return [];
   }
   try {
-    const shiftsCollection = collection(firestore, 'shifts');
-    const q = query(shiftsCollection, where("instructorId", "==", instructorId));
-    const shiftsSnapshot = await getDocs(q);
-    const shiftsList = shiftsSnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-    } as FirestoreShift));
-    return transformShiftsToClient(shiftsList);
-  } catch (error) {
-    console.error(`Error fetching shifts for instructor ${instructorId}:`, error);
+    const { data, error } = await supabase
+      .from('shifts')
+      .select('id, title, date, start_time, end_time, type, location, instructor_id, capacity, booked_count, notes, created_at, updated_at')
+      .eq('instructor_id', instructorId)
+      .order('date', { ascending: true });
+
+    if (error) throw error;
+
+    return (data ?? []).map((row) => mapShift(row as ShiftRow));
+  } catch {
     return [];
   }
 }
 
-/**
- * Get a single shift by ID
- */
 export async function getShiftById(shiftId: string): Promise<{ success: boolean; data?: Shift; error?: string }> {
   if (!shiftId) {
     return { success: false, error: 'Shift ID is required.' };
   }
 
   try {
-    const shiftRef = doc(firestore, 'shifts', shiftId);
-    const shiftDoc = await getDoc(shiftRef);
+    const { data, error } = await supabase
+      .from('shifts')
+      .select('id, title, date, start_time, end_time, type, location, instructor_id, capacity, booked_count, notes, created_at, updated_at')
+      .eq('id', shiftId)
+      .single();
 
-    if (!shiftDoc.exists()) {
+    if (error || !data) {
       return { success: false, error: 'Shift not found.' };
     }
 
-    const firestoreShift: FirestoreShift = {
-      id: shiftDoc.id,
-      ...shiftDoc.data(),
-    } as FirestoreShift;
-
-    const clientShift = transformShiftToClient(firestoreShift);
-    
-    console.log(`Retrieved shift ${shiftId}:`, clientShift.title);
-    return { success: true, data: clientShift };
+    return { success: true, data: mapShift(data as ShiftRow) };
   } catch (error: any) {
-    console.error('Error retrieving shift by ID:', error);
     return { success: false, error: error.message || 'Failed to retrieve shift.' };
   }
 }

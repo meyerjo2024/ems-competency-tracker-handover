@@ -1,17 +1,13 @@
-// src/components/dashboard/student/UpcomingShifts.tsx
 'use client';
 
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import Link from "next/link";
-import { CalendarDays, MapPin, User, Loader2 } from "lucide-react";
-import type { PopulatedShiftBooking } from "@/app/(app)/dashboard/student/page";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import Link from 'next/link';
+import { CalendarDays, MapPin, User, Loader2 } from 'lucide-react';
+import type { PopulatedShiftBooking } from '@/app/(app)/dashboard/student/page';
 import { format, parseISO } from 'date-fns';
-import { useAuth } from '@/context/AuthContext';
 import { useEffect, useState } from 'react';
-import { collection, doc, getDoc } from 'firebase/firestore';
-import { firestore } from '@/lib/firebase/config';
-import type { UserProfile } from '@/types';
+import { getUserById } from '@/actions/userActions';
 
 interface UpcomingShiftsProps {
   bookedShifts: PopulatedShiftBooking[];
@@ -25,21 +21,17 @@ export function UpcomingShifts({ bookedShifts, isLoading, error }: UpcomingShift
   useEffect(() => {
     async function fetchInstructorNames() {
       const names: Record<string, string> = {};
-      const uniqueInstructorIds = [...new Set(bookedShifts
-        .filter(booking => booking.shiftDetails?.instructorId)
-        .map(booking => booking.shiftDetails!.instructorId))];
+      const uniqueInstructorIds = [
+        ...new Set(bookedShifts.filter((booking) => booking.shiftDetails?.instructorId).map((booking) => booking.shiftDetails!.instructorId)),
+      ];
 
       for (const instructorId of uniqueInstructorIds) {
-        try {
-          const userDoc = await getDoc(doc(firestore, 'users', instructorId));
-          if (userDoc.exists()) {
-            const userData = userDoc.data() as UserProfile;
-            names[instructorId] = userData.fullName;
-          }
-        } catch (error) {
-          console.error(`Error fetching instructor name for ${instructorId}:`, error);
+        const userResult = await getUserById(instructorId);
+        if (userResult.success && userResult.data) {
+          names[instructorId] = userResult.data.fullName;
         }
       }
+
       setInstructorNames(names);
     }
 
@@ -64,29 +56,28 @@ export function UpcomingShifts({ bookedShifts, isLoading, error }: UpcomingShift
             <p className="text-muted-foreground">Loading upcoming shifts...</p>
           </div>
         )}
-        {!isLoading && error && (
-          <p className="text-destructive text-sm text-center">Error: {error}</p>
-        )}
-        {!isLoading && !error && bookedShifts.length > 0 && bookedShifts.map((booking) => {
-          const shift = booking.shiftDetails;
-          if (!shift) return null;
+        {!isLoading && error && <p className="text-destructive text-sm text-center">Error: {error}</p>}
+        {!isLoading && !error && bookedShifts.length > 0 &&
+          bookedShifts.map((booking) => {
+            const shift = booking.shiftDetails;
+            if (!shift) return null;
 
-          return (
-            <div key={booking.id} className="p-3 border rounded-lg bg-muted/50">
-              <p className="font-semibold text-foreground">
-                {format(parseISO(shift.date), "EEE, MMM d, yyyy")} 
-                <span className="font-normal text-muted-foreground"> ({shift.startTime} - {shift.endTime})</span>
-              </p>
-              <p className="text-sm text-foreground">{shift.title}</p>
-              <div className="flex items-center text-xs text-muted-foreground mt-1">
-                <MapPin className="h-3 w-3 mr-1" /> {shift.location}
+            return (
+              <div key={booking.id} className="p-3 border rounded-lg bg-muted/50">
+                <p className="font-semibold text-foreground">
+                  {format(parseISO(shift.date), 'EEE, MMM d, yyyy')}
+                  <span className="font-normal text-muted-foreground"> ({shift.startTime} - {shift.endTime})</span>
+                </p>
+                <p className="text-sm text-foreground">{shift.title}</p>
+                <div className="flex items-center text-xs text-muted-foreground mt-1">
+                  <MapPin className="h-3 w-3 mr-1" /> {shift.location}
+                </div>
+                <div className="flex items-center text-xs text-muted-foreground">
+                  <User className="h-3 w-3 mr-1" /> {instructorNames[shift.instructorId] || 'Loading...'}
+                </div>
               </div>
-              <div className="flex items-center text-xs text-muted-foreground">
-                <User className="h-3 w-3 mr-1" /> {instructorNames[shift.instructorId] || 'Loading...'}
-              </div>
-            </div>
-          );
-        })}
+            );
+          })}
         {!isLoading && !error && bookedShifts.length === 0 && (
           <p className="text-muted-foreground text-center">No upcoming shifts booked.</p>
         )}

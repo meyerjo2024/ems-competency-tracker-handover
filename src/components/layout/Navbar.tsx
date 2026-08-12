@@ -1,11 +1,9 @@
-// src/components/layout/Navbar.tsx
 'use client';
 
-import * as React from 'react'; // Added React import
+import * as React from 'react';
 import Link from 'next/link';
 import { Stethoscope, UserCircle, LogIn, UserPlus, LogOut, Loader2, MailWarning, MailCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-// import { SidebarTrigger } from '@/components/ui/sidebar'; // Not used
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,30 +11,30 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+} from '@/components/ui/dropdown-menu';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useAuth } from '@/context/AuthContext';
-import { firebaseAuth } from '@/lib/firebase/config';
-import { signOut, sendEmailVerification } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/lib/supabase/config';
 
 export function Navbar() {
-  const { currentUser, firebaseUser, isLoading } = useAuth();
+  const { currentUser, firebaseUser, isLoading, signOut } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
   const [isResendingEmail, setIsResendingEmail] = React.useState(false);
 
+  const isEmailVerified = Boolean(firebaseUser?.email_confirmed_at);
+
   const handleLogout = async () => {
     try {
-      await signOut(firebaseAuth);
+      await signOut();
       toast({
         title: 'Logged Out',
         description: 'You have been successfully logged out.',
       });
       router.push('/login');
-    } catch (error) {
-      console.error('Logout error:', error);
+    } catch {
       toast({
         title: 'Logout Failed',
         description: 'An error occurred while logging out.',
@@ -46,27 +44,35 @@ export function Navbar() {
   };
 
   const handleResendVerificationEmail = async () => {
-    if (!firebaseAuth.currentUser) {
+    if (!firebaseUser?.email) {
       toast({
-        title: "Error",
-        description: "You must be logged in to resend a verification email.",
-        variant: "destructive",
+        title: 'Error',
+        description: 'You must be logged in to resend a verification email.',
+        variant: 'destructive',
       });
       return;
     }
+
     setIsResendingEmail(true);
     try {
-      await sendEmailVerification(firebaseAuth.currentUser);
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: firebaseUser.email,
+      });
+
+      if (error) {
+        throw error;
+      }
+
       toast({
-        title: "Verification Email Sent",
-        description: "A new verification email has been sent to your address. Please check your inbox (and spam folder).",
+        title: 'Verification Email Sent',
+        description: 'A new verification email has been sent to your address. Please check your inbox (and spam folder).',
       });
     } catch (error: any) {
-      console.error("Error resending verification email:", error);
       toast({
-        title: "Failed to Resend Email",
-        description: error.message || "An error occurred. Please try again later.",
-        variant: "destructive",
+        title: 'Failed to Resend Email',
+        description: error.message || 'An error occurred. Please try again later.',
+        variant: 'destructive',
       });
     } finally {
       setIsResendingEmail(false);
@@ -80,9 +86,7 @@ export function Navbar() {
           <div className="flex items-center">
             <Link href="/" className="flex items-center space-x-2">
               <Stethoscope className="h-6 w-6 text-primary" />
-              <span className="font-bold sm:inline-block text-foreground">
-                EMS Competency Tracker
-              </span>
+              <span className="font-bold sm:inline-block text-foreground">EMS Competency Tracker</span>
             </Link>
           </div>
 
@@ -103,17 +107,13 @@ export function Navbar() {
                     {currentUser.role && <span className="block text-xs text-muted-foreground font-normal">{currentUser.role}</span>}
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  {!firebaseUser.emailVerified && (
+                  {!isEmailVerified && (
                     <>
                       <DropdownMenuItem className="text-yellow-600 focus:bg-yellow-100 focus:text-yellow-700" disabled>
                         <MailWarning className="mr-2 h-4 w-4" /> Email not verified
                       </DropdownMenuItem>
-                       <DropdownMenuItem onClick={handleResendVerificationEmail} disabled={isResendingEmail}>
-                        {isResendingEmail ? (
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        ) : (
-                            <MailCheck className="mr-2 h-4 w-4" />
-                        )}
+                      <DropdownMenuItem onClick={handleResendVerificationEmail} disabled={isResendingEmail}>
+                        {isResendingEmail ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <MailCheck className="mr-2 h-4 w-4" />}
                         Resend Verification
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
@@ -149,27 +149,24 @@ export function Navbar() {
           </div>
         </div>
       </header>
-      {!isLoading && currentUser && firebaseUser && !firebaseUser.emailVerified && (
+      {!isLoading && currentUser && firebaseUser && !isEmailVerified && (
         <div className="container px-4 sm:px-6 lg:px-8 py-2">
-            <Alert variant="default" className="bg-yellow-50 border-yellow-300 text-yellow-700 [&>svg]:text-yellow-600">
-                <MailWarning className="h-4 w-4" />
-                <AlertTitle>Verify Your Email Address</AlertTitle>
-                <AlertDescription className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-                Please check your inbox for a verification email. If you didn't receive it, you can resend it.
-                <Button 
-                    variant="link" 
-                    onClick={handleResendVerificationEmail} 
-                    disabled={isResendingEmail}
-                    className="mt-2 sm:mt-0 sm:ml-4 text-yellow-700 hover:text-yellow-800 px-0"
-                >
-                    {isResendingEmail ? (
-                        <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Resending...</>
-                    ) : (
-                        "Resend Verification Email"
-                    )}
-                </Button>
-                </AlertDescription>
-            </Alert>
+          <Alert variant="default" className="bg-yellow-50 border-yellow-300 text-yellow-700 [&>svg]:text-yellow-600">
+            <MailWarning className="h-4 w-4" />
+            <AlertTitle>Verify Your Email Address</AlertTitle>
+            <AlertDescription className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+              Please check your inbox for a verification email. If you didn't receive it, you can resend it.
+              <Button variant="link" onClick={handleResendVerificationEmail} disabled={isResendingEmail} className="mt-2 sm:mt-0 sm:ml-4 text-yellow-700 hover:text-yellow-800 px-0">
+                {isResendingEmail ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Resending...
+                  </>
+                ) : (
+                  'Resend Verification Email'
+                )}
+              </Button>
+            </AlertDescription>
+          </Alert>
         </div>
       )}
     </>

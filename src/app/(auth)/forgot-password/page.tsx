@@ -1,4 +1,3 @@
-// src/app/(auth)/forgot-password/page.tsx
 'use client';
 
 import * as React from 'react';
@@ -12,8 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { MailQuestion, KeyRound, Loader2, CheckCircle2, Mail } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { firebaseAuth } from '@/lib/firebase/config';
-import { sendPasswordResetEmail } from 'firebase/auth';
+import { supabase } from '@/lib/supabase/config';
 
 const forgotPasswordSchema = z.object({
   email: z.string().email({ message: 'Invalid email address.' }),
@@ -37,7 +35,6 @@ export default function ForgotPasswordPage() {
     resolver: zodResolver(forgotPasswordSchema),
   });
 
-  // Mask email for display (e.g., test@example.com -> t***t@example.com)
   const maskEmail = (email: string) => {
     const [localPart, domain] = email.split('@');
     if (localPart.length <= 2) return email;
@@ -45,7 +42,6 @@ export default function ForgotPasswordPage() {
     return `${masked}@${domain}`;
   };
 
-  // Timer for resend cooldown
   React.useEffect(() => {
     let interval: NodeJS.Timeout;
     if (resendTimer > 0) {
@@ -63,21 +59,19 @@ export default function ForgotPasswordPage() {
   }, [resendTimer]);
 
   const sendResetEmail = async (email: string) => {
-    try {
-      await sendPasswordResetEmail(firebaseAuth, email);
-      return true;
-    } catch (error: any) {
+    const { error } = await supabase.auth.resetPasswordForEmail(email);
+    if (error) {
       console.error('Password reset error:', error);
-      return true; // Still return true for security (don't reveal if email exists)
     }
+    return true;
   };
 
   const onSubmit: SubmitHandler<ForgotPasswordFormInputs> = async (data) => {
     setIsLoading(true);
     setMessageSent(false);
-    
+
     const success = await sendResetEmail(data.email);
-    
+
     if (success) {
       toast({
         title: 'Password Reset Email Sent',
@@ -86,46 +80,39 @@ export default function ForgotPasswordPage() {
       setSentEmail(data.email);
       setMessageSent(true);
       setCanResend(false);
-      setResendTimer(60); // 60 second cooldown
+      setResendTimer(60);
     }
-    
+
     setIsLoading(false);
   };
 
   const handleResend = async () => {
     if (!canResend || !sentEmail) return;
-    
+
     setIsLoading(true);
     const success = await sendResetEmail(sentEmail);
-    
+
     if (success) {
       toast({
         title: 'Email Resent',
-        description: 'We\'ve sent another password reset link to your email.',
+        description: "We've sent another password reset link to your email.",
       });
       setCanResend(false);
-      setResendTimer(60); // Reset cooldown
+      setResendTimer(60);
     }
-    
+
     setIsLoading(false);
   };
 
   return (
     <Card className={`w-full max-w-md shadow-xl ${messageSent ? 'border-green-200 border-2' : ''}`}>
       <CardHeader className="space-y-1 text-center">
-        {messageSent ? (
-          <CheckCircle2 className="mx-auto h-12 w-12 text-green-600" />
-        ) : (
-          <KeyRound className="mx-auto h-10 w-10 text-primary" />
-        )}
-        <CardTitle className="text-2xl font-bold">
-          {messageSent ? 'Check Your Email!' : 'Forgot Password?'}
-        </CardTitle>
+        {messageSent ? <CheckCircle2 className="mx-auto h-12 w-12 text-green-600" /> : <KeyRound className="mx-auto h-10 w-10 text-primary" />}
+        <CardTitle className="text-2xl font-bold">{messageSent ? 'Check Your Email!' : 'Forgot Password?'}</CardTitle>
         <CardDescription>
-          {messageSent 
+          {messageSent
             ? "We've sent password reset instructions to your email address."
-            : "No worries! Enter your email below and we'll send you a link to reset your password."
-          }
+            : "No worries! Enter your email below and we'll send you a link to reset your password."}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -133,21 +120,11 @@ export default function ForgotPasswordPage() {
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="you@example.com"
-                {...register('email')}
-                className={errors.email ? 'border-destructive' : ''}
-              />
+              <Input id="email" type="email" placeholder="you@example.com" {...register('email')} className={errors.email ? 'border-destructive' : ''} />
               {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
             </div>
             <Button type="submit" className="w-full bg-primary hover:bg-primary/90" disabled={isLoading}>
-              {isLoading ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <MailQuestion className="mr-2 h-4 w-4" />
-              )}
+              {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <MailQuestion className="mr-2 h-4 w-4" />}
               Send Reset Link
             </Button>
           </form>
@@ -160,13 +137,11 @@ export default function ForgotPasswordPage() {
                   <p className="text-sm font-medium text-green-900">
                     Email sent to: <span className="font-mono">{maskEmail(sentEmail)}</span>
                   </p>
-                  <p className="text-sm text-green-700">
-                    Please check your inbox (and spam/junk folder) for the password reset link. The link will expire in 1 hour.
-                  </p>
+                  <p className="text-sm text-green-700">Please check your inbox (and spam/junk folder) for the password reset link.</p>
                 </div>
               </div>
             </div>
-            
+
             <div className="text-center space-y-2">
               <p className="text-sm text-muted-foreground">Didn't receive the email?</p>
               {resendTimer > 0 ? (
@@ -174,18 +149,8 @@ export default function ForgotPasswordPage() {
                   You can resend in <span className="font-semibold">{resendTimer}</span> seconds
                 </p>
               ) : (
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={handleResend}
-                  disabled={!canResend || isLoading}
-                  className="w-full"
-                >
-                  {isLoading ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Mail className="mr-2 h-4 w-4" />
-                  )}
+                <Button variant="outline" size="sm" onClick={handleResend} disabled={!canResend || isLoading} className="w-full">
+                  {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />}
                   Resend Email
                 </Button>
               )}
@@ -200,9 +165,9 @@ export default function ForgotPasswordPage() {
           </Button>
         </Link>
         {messageSent && (
-          <Button 
-            variant="ghost" 
-            size="sm" 
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => {
               setMessageSent(false);
               setSentEmail('');

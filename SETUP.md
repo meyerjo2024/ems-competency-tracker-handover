@@ -61,7 +61,7 @@ This will install all required packages including Next.js, Firebase, and UI libr
 
 **Critical:** You must create your own Firebase project. Do not use any existing Firebase configuration.
 
-Follow **FIREBASE_SETUP_GUIDE.md** for detailed step-by-step instructions:
+Follow **SUPABASE_SETUP_GUIDE.md** for detailed step-by-step instructions:
 - Create new Firebase project
 - Enable Firestore database
 - Enable Authentication (Email/Password)
@@ -199,6 +199,6 @@ npm run typecheck    # Check TypeScript errors
 
 ---
 
-For detailed Firebase setup, see **FIREBASE_SETUP_GUIDE.md**  
+For detailed Firebase setup, see **SUPABASE_SETUP_GUIDE.md**  
 For deployment instructions, see **DEPLOYMENT.md**  
 For user documentation, see **USER_GUIDE.md**
