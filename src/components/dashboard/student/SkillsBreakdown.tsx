@@ -55,7 +55,7 @@ export function SkillsBreakdown({ progress }: SkillsBreakdownProps) {
                 tickFormatter={(value) => value.slice(0, 15)}
               />
               <ChartTooltip content={<ChartTooltipContent hideLabel />} />
-              <Bar dataKey="logged" name="Logged" radius={4} fill="var(--color-completed)" />
+              <Bar dataKey="logged" name="Logged" radius={4} fill="var(--color-logged)" />
               <Bar dataKey="required" name="Required" radius={4} fill="var(--color-required)" />
             </RechartsBarChart>
           </ChartContainer>

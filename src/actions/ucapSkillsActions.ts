@@ -80,7 +80,7 @@ export async function getUCAPSkillsForStudent(studentId: string): Promise<{
   const totalLogged = data.reduce((sum, skill) => sum + (skill.successfulAttempts || 0), 0);
   const totalRequired = data.reduce((sum, skill) => sum + (skill.attemptsRequired || 1), 0);
   const verifiedSkills = data.filter((skill) => skill.verificationStatus === 'Verified').length;
-  const pendingSkills = data.filter((skill) => (skill.verificationStatus || 'Pending') !== 'Verified').length;
+  const pendingSkills = data.filter((skill) => !skill.verificationStatus || skill.verificationStatus === 'Pending').length;
 
   return {
     success: true,

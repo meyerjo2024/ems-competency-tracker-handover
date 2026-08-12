@@ -21,20 +21,25 @@ export function inferUCAPSkillCategory(skillName: string): string {
 
 export function buildUCAPSkillsFromExtractedNames(skillNames: string[]): UCAPSkill[] {
   return skillNames
-    .map((name, index) => name.trim())
+    .map((name) => name.trim())
     .filter(Boolean)
-    .map((name, index) => ({
-      id: `ai-${Date.now()}-${index}`,
-      name,
-      category: inferUCAPSkillCategory(name),
-      source: 'AI' as const,
-      attemptsRequired: 1,
-      successfulAttempts: 1,
-      verificationStatus: 'Pending' as const,
-      confidenceLevel: 'Developing' as const,
-      lastPerformed: new Date(),
-      extractedAt: new Date(),
-    }));
+    .map((name, index) => {
+      const category = inferUCAPSkillCategory(name);
+      const normalized = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+
+      return {
+        id: `ai-${normalized}-${category.toLowerCase()}-${index}`,
+        name,
+        category,
+        source: 'AI' as const,
+        attemptsRequired: 1,
+        successfulAttempts: 1,
+        verificationStatus: 'Pending' as const,
+        confidenceLevel: 'Developing' as const,
+        lastPerformed: new Date(),
+        extractedAt: new Date(),
+      };
+    });
 }
 
 export function mergeUCAPSkills(skills: UCAPSkill[]): UCAPSkill[] {
