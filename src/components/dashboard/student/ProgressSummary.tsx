@@ -3,15 +3,18 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { BarChart, CheckCircle2, Target } from "lucide-react";
+import type { UCAPSkillProgressSummary } from '@/types';
 
-const progressData = {
-  overallProgress: 65,
-  skillsCompleted: 32,
-  skillsRequired: 50,
-  certificationReadiness: 70,
-};
+interface ProgressSummaryProps {
+  progress: UCAPSkillProgressSummary | null;
+}
 
-export function ProgressSummary() {
+export function ProgressSummary({ progress }: ProgressSummaryProps) {
+  const skillsCompleted = progress?.totalLogged || 0;
+  const skillsRequired = progress?.categories.reduce((sum, category) => sum + category.required, 0) || 0;
+  const overallProgress = progress?.completionPercent || 0;
+  const certificationReadiness = progress ? Math.min(100, Math.round((progress.verifiedSkills / Math.max(progress.uniqueSkills, 1)) * 100)) : 0;
+
   return (
     <Card>
       <CardHeader>
@@ -25,29 +28,29 @@ export function ProgressSummary() {
         <div>
           <div className="flex justify-between mb-1">
             <span className="text-sm font-medium text-foreground">Overall Progress</span>
-            <span className="text-sm font-medium text-primary">{progressData.overallProgress}%</span>
+            <span className="text-sm font-medium text-primary">{overallProgress}%</span>
           </div>
-          <Progress value={progressData.overallProgress} aria-label="Overall progress" />
+          <Progress value={overallProgress} aria-label="Overall progress" />
         </div>
         <div>
           <div className="flex justify-between mb-1">
             <span className="text-sm font-medium text-foreground">Skills Logged</span>
              <span className="text-sm font-medium text-primary">
               <CheckCircle2 className="inline h-4 w-4 mr-1" />
-              {progressData.skillsCompleted} / {progressData.skillsRequired}
+              {skillsCompleted} / {skillsRequired}
             </span>
           </div>
-          <Progress value={(progressData.skillsCompleted / progressData.skillsRequired) * 100} aria-label="Skills completed" />
+          <Progress value={skillsRequired > 0 ? (skillsCompleted / skillsRequired) * 100 : 0} aria-label="Skills completed" />
         </div>
         <div>
           <div className="flex justify-between mb-1">
             <span className="text-sm font-medium text-foreground">Certification Readiness</span>
             <span className="text-sm font-medium text-accent">
               <Target className="inline h-4 w-4 mr-1" />
-              {progressData.certificationReadiness}%
+              {certificationReadiness}%
             </span>
           </div>
-          <Progress value={progressData.certificationReadiness} className="[&>div]:bg-accent" aria-label="Certification readiness"/>
+          <Progress value={certificationReadiness} className="[&>div]:bg-accent" aria-label="Certification readiness"/>
         </div>
       </CardContent>
     </Card>

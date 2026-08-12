@@ -3,7 +3,7 @@
 
 import * as React from 'react';
 import { useForm, FormProvider } from 'react-hook-form';
-import type { PatientCareFormData } from '@/types';
+import type { PatientCareFormData, UCAPSkill } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PatientAssessmentTab } from './PatientAssessmentTab';
@@ -114,7 +114,7 @@ export function PatientCareForm({ initialData, shiftId, isViewMode = false }: Pa
   const { currentUser } = useAuth();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [isGenerating, setIsGenerating] = React.useState(false);
-  const [extractedSkills, setExtractedSkills] = React.useState<string[] | undefined>(undefined);
+  const [extractedSkills, setExtractedSkills] = React.useState<UCAPSkill[] | undefined>(undefined);
 
   // Reset form when initialData changes (for edit mode)
   React.useEffect(() => {
@@ -225,7 +225,7 @@ export function PatientCareForm({ initialData, shiftId, isViewMode = false }: Pa
           setExtractedSkills(result.skills);
            toast({
             title: "Skills Extracted",
-            description: `Found ${result.skills.length} skills: ${result.skills.join(', ')}`,
+            description: `Found ${result.skills.length} skills: ${result.skills.map((skill) => skill.name).join(', ')}`,
           });
         } else if (result.skills) { 
            setExtractedSkills([]);
@@ -335,7 +335,7 @@ export function PatientCareForm({ initialData, shiftId, isViewMode = false }: Pa
         setExtractedSkills(result.skills);
         toast({
           title: "Skills Extracted",
-          description: `Found ${result.skills.length} skills: ${result.skills.join(', ')}`,
+          description: `Found ${result.skills.length} skills: ${result.skills.map((skill) => skill.name).join(', ')}`,
         });
       } else if (result.skills && result.skills.length === 0) {
         setExtractedSkills([]);
@@ -402,7 +402,9 @@ export function PatientCareForm({ initialData, shiftId, isViewMode = false }: Pa
             </h3>
             <ul className="list-disc list-inside space-y-1">
               {extractedSkills.map((skill, index) => (
-                <li key={index}>{skill}</li>
+                <li key={skill.id || `${skill.name}-${index}`}>
+                  {skill.name} <span className="text-xs text-muted-foreground">({skill.category})</span>
+                </li>
               ))}
             </ul>
             <p className="text-xs text-muted-foreground mt-2">Note: These are suggestions. Please verify and add them manually to your skills log if accurate.</p>

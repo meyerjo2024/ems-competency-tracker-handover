@@ -78,6 +78,7 @@ export interface PatientCareFormData {
   patientAssessmentNarrative?: string;
   studentReflection?: string;
   instructorFeedback?: string; 
+  ucapSkills?: UCAPSkill[];
 
   // Metadata
   id?: string;
@@ -499,16 +500,39 @@ export interface MedicationEntry {
 }
 
 
-export interface Skill { 
+export type UCAPSkillVerificationStatus = 'Pending' | 'Verified' | 'Rejected';
+export type UCAPSkillConfidenceLevel = 'Not Confident' | 'Developing' | 'Competent' | 'Proficient';
+export type UCAPSkillSource = 'AI' | 'Manual';
+
+export interface UCAPSkill {
   id: string;
   name: string;
   category: string;
+  source?: UCAPSkillSource;
   attemptsRequired?: number;
   successfulAttempts?: number;
-  verificationStatus?: 'Pending' | 'Verified' | 'Rejected';
-  confidenceLevel?: 'Not Confident' | 'Developing' | 'Competent' | 'Proficient';
-  lastPerformed?: Date;
+  verificationStatus?: UCAPSkillVerificationStatus;
+  confidenceLevel?: UCAPSkillConfidenceLevel;
+  lastPerformed?: Date | Timestamp;
+  extractedAt?: Date | Timestamp;
 }
+
+export interface UCAPSkillCategoryProgress {
+  category: string;
+  logged: number;
+  required: number;
+}
+
+export interface UCAPSkillProgressSummary {
+  totalLogged: number;
+  uniqueSkills: number;
+  verifiedSkills: number;
+  pendingSkills: number;
+  completionPercent: number;
+  categories: UCAPSkillCategoryProgress[];
+}
+
+export type Skill = UCAPSkill;
 
 export interface UserProfile {
   id: string; // Firebase Auth UID
