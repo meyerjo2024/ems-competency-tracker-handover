@@ -1,109 +1,107 @@
-// NOTE: These are NOT server actions - they run on the client to preserve auth context
-// Server actions don't have access to Firebase Auth tokens
-
 import type { ShiftFeedback } from '@/types';
-import { firestore } from '@/lib/firebase/config';
-import { collection, addDoc, updateDoc, doc, serverTimestamp, getDoc, getDocs, query, where, orderBy } from 'firebase/firestore';
+import { supabase } from '@/lib/supabase/config';
 import { updateBookingStatus } from './bookingActions';
 
-/**
- * Submit shift-level feedback from instructor to student
- * This is REQUIRED feedback at the shift level (not optional like encounter-level feedback)
- */
+type ShiftFeedbackRow = {
+  id: string;
+  shift_id: string;
+  instructor_id: string;
+  student_id: string;
+  overall_feedback: string;
+  performance_rating: number | null;
+  areas_of_strength: string | null;
+  areas_for_improvement: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+
+const ratingToNumber: Record<NonNullable<ShiftFeedback['performanceRating']>, number> = {
+  Excellent: 4,
+  Good: 3,
+  Satisfactory: 2,
+  'Needs Improvement': 1,
+};
+
+function ratingFromNumber(value: number | null): ShiftFeedback['performanceRating'] | undefined {
+  if (value === 4) return 'Excellent';
+  if (value === 3) return 'Good';
+  if (value === 2) return 'Satisfactory';
+  if (value === 1) return 'Needs Improvement';
+  return undefined;
+}
+
+function mapShiftFeedback(row: ShiftFeedbackRow): ShiftFeedback {
+  return {
+    id: row.id,
+    shiftId: row.shift_id,
+    instructorId: row.instructor_id,
+    studentId: row.student_id,
+    overallFeedback: row.overall_feedback,
+    performanceRating: ratingFromNumber(row.performance_rating),
+    areasOfStrength: row.areas_of_strength ?? undefined,
+    areasForImprovement: row.areas_for_improvement ?? undefined,
+    createdAt: row.created_at ? new Date(row.created_at) : null,
+    updatedAt: row.updated_at ? new Date(row.updated_at) : null,
+  };
+}
+
+function toRowInput(feedbackData: Omit<ShiftFeedback, 'id' | 'createdAt' | 'updatedAt'>) {
+  return {
+    shift_id: feedbackData.shiftId,
+    instructor_id: feedbackData.instructorId,
+    student_id: feedbackData.studentId,
+    overall_feedback: feedbackData.overallFeedback,
+    performance_rating: feedbackData.performanceRating ? ratingToNumber[feedbackData.performanceRating] : null,
+    areas_of_strength: feedbackData.areasOfStrength ?? null,
+    areas_for_improvement: feedbackData.areasForImprovement ?? null,
+  };
+}
+
 export async function submitShiftFeedback(
   feedbackData: Omit<ShiftFeedback, 'id' | 'createdAt' | 'updatedAt'>
 ): Promise<{ success: boolean; data?: ShiftFeedback; error?: string }> {
-  
-  // Validate required fields
   if (!feedbackData.shiftId || !feedbackData.instructorId || !feedbackData.studentId || !feedbackData.overallFeedback) {
     return { success: false, error: 'Shift ID, Instructor ID, Student ID, and Overall Feedback are required.' };
   }
 
   try {
-    const feedbackCollection = collection(firestore, 'shiftFeedback');
-    
-    // Check if feedback already exists for this shift-student-instructor combination
-    const q = query(
-      feedbackCollection,
-      where('shiftId', '==', feedbackData.shiftId),
-      where('studentId', '==', feedbackData.studentId),
-      where('instructorId', '==', feedbackData.instructorId)
-    );
-    
-    const existingFeedback = await getDocs(q);
-    
-    if (!existingFeedback.empty) {
-      // Update existing feedback
-      const feedbackId = existingFeedback.docs[0].id;
-      const feedbackRef = doc(firestore, 'shiftFeedback', feedbackId);
-      
-      await updateDoc(feedbackRef, {
-        ...feedbackData,
-        updatedAt: serverTimestamp(),
-      });
-      
-      console.log('Updated shift feedback:', feedbackId);
-      return { 
-        success: true, 
-        data: { id: feedbackId, ...feedbackData } as ShiftFeedback 
-      };
-    } else {
-      // Create new feedback
-      const docRef = await addDoc(feedbackCollection, {
-        ...feedbackData,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
-      
-      console.log('Created new shift feedback:', docRef.id);
-      return { 
-        success: true, 
-        data: { id: docRef.id, ...feedbackData } as ShiftFeedback 
-      };
-    }
+    const { data, error } = await supabase
+      .from('shift_feedback')
+      .upsert(toRowInput(feedbackData), { onConflict: 'shift_id,student_id,instructor_id' })
+      .select('id, shift_id, instructor_id, student_id, overall_feedback, performance_rating, areas_of_strength, areas_for_improvement, created_at, updated_at')
+      .single();
+
+    if (error || !data) throw error ?? new Error('Failed to save feedback');
+
+    return { success: true, data: mapShiftFeedback(data as ShiftFeedbackRow) };
   } catch (error: any) {
-    console.error('Error submitting shift feedback:', error);
     return { success: false, error: error.message || 'Failed to submit shift feedback.' };
   }
 }
 
-/**
- * Get ALL shift feedbacks for a specific student (across all shifts)
- * Used by students to view their feedback history
- */
 export async function getAllFeedbacksForStudent(studentId: string): Promise<{ success: boolean; data?: ShiftFeedback[]; error?: string }> {
   if (!studentId) {
     return { success: false, error: 'Student ID is required.' };
   }
 
   try {
-    const feedbackCollection = collection(firestore, 'shiftFeedback');
-    const q = query(
-      feedbackCollection,
-      where('studentId', '==', studentId),
-      orderBy('createdAt', 'desc')
-    );
-    
-    const querySnapshot = await getDocs(q);
-    const feedbacks: ShiftFeedback[] = [];
-    
-    querySnapshot.forEach((doc) => {
-      feedbacks.push({ id: doc.id, ...doc.data() } as ShiftFeedback);
-    });
-    
-    console.log(`Retrieved ${feedbacks.length} shift feedbacks for student ${studentId}`);
-    return { success: true, data: feedbacks };
+    const { data, error } = await supabase
+      .from('shift_feedback')
+      .select('id, shift_id, instructor_id, student_id, overall_feedback, performance_rating, areas_of_strength, areas_for_improvement, created_at, updated_at')
+      .eq('student_id', studentId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    return { success: true, data: (data ?? []).map((row) => mapShiftFeedback(row as ShiftFeedbackRow)) };
   } catch (error: any) {
-    console.error('Error retrieving shift feedback for student:', error);
     return { success: false, error: error.message || 'Failed to retrieve shift feedback.' };
   }
 }
 
-/**
- * Get shift feedback for a specific shift and student
- */
 export async function getShiftFeedbackForShiftAndStudent(
-  shiftId: string, 
+  shiftId: string,
   studentId: string
 ): Promise<{ success: boolean; data?: ShiftFeedback; error?: string }> {
   if (!shiftId || !studentId) {
@@ -111,102 +109,66 @@ export async function getShiftFeedbackForShiftAndStudent(
   }
 
   try {
-    const feedbackCollection = collection(firestore, 'shiftFeedback');
-    const q = query(
-      feedbackCollection,
-      where('shiftId', '==', shiftId),
-      where('studentId', '==', studentId)
-    );
-    
-    const querySnapshot = await getDocs(q);
-    
-    if (querySnapshot.empty) {
-      return { success: true, data: undefined }; // No feedback yet
-    }
-    
-    const feedbackDoc = querySnapshot.docs[0];
-    const feedback = { id: feedbackDoc.id, ...feedbackDoc.data() } as ShiftFeedback;
-    
-    console.log(`Retrieved shift feedback for shift ${shiftId} and student ${studentId}`);
-    return { success: true, data: feedback };
+    const { data, error } = await supabase
+      .from('shift_feedback')
+      .select('id, shift_id, instructor_id, student_id, overall_feedback, performance_rating, areas_of_strength, areas_for_improvement, created_at, updated_at')
+      .eq('shift_id', shiftId)
+      .eq('student_id', studentId)
+      .limit(1)
+      .maybeSingle();
+
+    if (error) throw error;
+
+    return { success: true, data: data ? mapShiftFeedback(data as ShiftFeedbackRow) : undefined };
   } catch (error: any) {
-    console.error('Error retrieving shift feedback:', error);
     return { success: false, error: error.message || 'Failed to retrieve shift feedback.' };
   }
 }
 
-/**
- * Get all shift feedback submitted by a specific instructor
- */
 export async function getShiftFeedbackByInstructor(instructorId: string): Promise<{ success: boolean; data?: ShiftFeedback[]; error?: string }> {
   if (!instructorId) {
     return { success: false, error: 'Instructor ID is required.' };
   }
 
   try {
-    const feedbackCollection = collection(firestore, 'shiftFeedback');
-    const q = query(
-      feedbackCollection,
-      where('instructorId', '==', instructorId),
-      orderBy('createdAt', 'desc')
-    );
-    
-    const querySnapshot = await getDocs(q);
-    const feedbacks: ShiftFeedback[] = [];
-    
-    querySnapshot.forEach((doc) => {
-      feedbacks.push({ id: doc.id, ...doc.data() } as ShiftFeedback);
-    });
-    
-    console.log(`Retrieved ${feedbacks.length} shift feedbacks by instructor ${instructorId}`);
-    return { success: true, data: feedbacks };
+    const { data, error } = await supabase
+      .from('shift_feedback')
+      .select('id, shift_id, instructor_id, student_id, overall_feedback, performance_rating, areas_of_strength, areas_for_improvement, created_at, updated_at')
+      .eq('instructor_id', instructorId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    return { success: true, data: (data ?? []).map((row) => mapShiftFeedback(row as ShiftFeedbackRow)) };
   } catch (error: any) {
-    console.error('Error retrieving shift feedback by instructor:', error);
     return { success: false, error: error.message || 'Failed to retrieve shift feedback.' };
   }
 }
 
-/**
- * Get all shift feedback for a specific shift (all students)
- */
 export async function getShiftFeedbackForShift(shiftId: string): Promise<{ success: boolean; data?: ShiftFeedback[]; error?: string }> {
   if (!shiftId) {
     return { success: false, error: 'Shift ID is required.' };
   }
 
   try {
-    const feedbackCollection = collection(firestore, 'shiftFeedback');
-    const q = query(
-      feedbackCollection,
-      where('shiftId', '==', shiftId),
-      orderBy('createdAt', 'asc')
-    );
-    
-    const querySnapshot = await getDocs(q);
-    const feedbacks: ShiftFeedback[] = [];
-    
-    querySnapshot.forEach((doc) => {
-      feedbacks.push({ id: doc.id, ...doc.data() } as ShiftFeedback);
-    });
-    
-    console.log(`Retrieved ${feedbacks.length} shift feedbacks for shift ${shiftId}`);
-    return { success: true, data: feedbacks };
+    const { data, error } = await supabase
+      .from('shift_feedback')
+      .select('id, shift_id, instructor_id, student_id, overall_feedback, performance_rating, areas_of_strength, areas_for_improvement, created_at, updated_at')
+      .eq('shift_id', shiftId)
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+
+    return { success: true, data: (data ?? []).map((row) => mapShiftFeedback(row as ShiftFeedbackRow)) };
   } catch (error: any) {
-    console.error('Error retrieving shift feedback for shift:', error);
     return { success: false, error: error.message || 'Failed to retrieve shift feedback.' };
   }
 }
 
-/**
- * Save shift-level feedback for a specific student
- * Each student on a shift gets individual feedback from the instructor
- */
 export async function saveShiftFeedback(
   feedbackData: Omit<ShiftFeedback, 'id' | 'createdAt' | 'updatedAt'>,
   feedbackId?: string
 ): Promise<{ success: boolean; data?: ShiftFeedback; error?: string }> {
-  
-  // Validate required fields
   if (!feedbackData.shiftId || !feedbackData.instructorId || !feedbackData.studentId) {
     return { success: false, error: 'Shift ID, Instructor ID, and Student ID are required.' };
   }
@@ -216,119 +178,56 @@ export async function saveShiftFeedback(
   }
 
   try {
-    // Clean data: Remove undefined fields (Firestore doesn't accept undefined)
-    const cleanedData = Object.fromEntries(
-      Object.entries(feedbackData).filter(([_, value]) => value !== undefined)
-    );
+    let result: ShiftFeedback | undefined;
 
-    const feedbackCollection = collection(firestore, 'shiftFeedback');
-    
     if (feedbackId) {
-      // Update existing feedback
-      const feedbackRef = doc(firestore, 'shiftFeedback', feedbackId);
-      await updateDoc(feedbackRef, {
-        ...cleanedData,
-        updatedAt: serverTimestamp(),
-      });
-      
-      console.log('Updated shift feedback:', feedbackId);
-      
-      // Mark booking as 'Reviewed' after feedback is saved
-      await markShiftAsReviewed(feedbackData.shiftId, feedbackData.studentId);
-      
-      return { 
-        success: true, 
-        data: { id: feedbackId, ...feedbackData } as ShiftFeedback 
-      };
+      const { data, error } = await supabase
+        .from('shift_feedback')
+        .update(toRowInput(feedbackData))
+        .eq('id', feedbackId)
+        .select('id, shift_id, instructor_id, student_id, overall_feedback, performance_rating, areas_of_strength, areas_for_improvement, created_at, updated_at')
+        .single();
+
+      if (error || !data) throw error ?? new Error('Failed to update feedback');
+      result = mapShiftFeedback(data as ShiftFeedbackRow);
     } else {
-      // Check if feedback already exists for this shift-instructor-student combination
-      const q = query(
-        feedbackCollection,
-        where('shiftId', '==', feedbackData.shiftId),
-        where('instructorId', '==', feedbackData.instructorId),
-        where('studentId', '==', feedbackData.studentId)
-      );
-      
-      const existingFeedback = await getDocs(q);
-      
-      if (!existingFeedback.empty) {
-        // Update existing feedback
-        const existingId = existingFeedback.docs[0].id;
-        const feedbackRef = doc(firestore, 'shiftFeedback', existingId);
-        await updateDoc(feedbackRef, {
-          ...cleanedData,
-          updatedAt: serverTimestamp(),
-        });
-        
-        console.log('Updated existing shift feedback:', existingId);
-        
-        // Mark booking as 'Reviewed' after feedback is saved
-        await markShiftAsReviewed(feedbackData.shiftId, feedbackData.studentId);
-        
-        return { 
-          success: true, 
-          data: { id: existingId, ...feedbackData } as ShiftFeedback 
-        };
-      }
-      
-      // Create new feedback
-      const docRef = await addDoc(feedbackCollection, {
-        ...cleanedData,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
-      
-      console.log('Created new shift feedback:', docRef.id);
-      
-      // Mark booking as 'Reviewed' after feedback is saved
-      await markShiftAsReviewed(feedbackData.shiftId, feedbackData.studentId);
-      
-      return { 
-        success: true, 
-        data: { id: docRef.id, ...feedbackData } as ShiftFeedback 
-      };
+      const { data, error } = await supabase
+        .from('shift_feedback')
+        .upsert(toRowInput(feedbackData), { onConflict: 'shift_id,student_id,instructor_id' })
+        .select('id, shift_id, instructor_id, student_id, overall_feedback, performance_rating, areas_of_strength, areas_for_improvement, created_at, updated_at')
+        .single();
+
+      if (error || !data) throw error ?? new Error('Failed to create feedback');
+      result = mapShiftFeedback(data as ShiftFeedbackRow);
     }
+
+    await markShiftAsReviewed(feedbackData.shiftId, feedbackData.studentId);
+
+    return { success: true, data: result };
   } catch (error: any) {
-    console.error('Error saving shift feedback:', error);
     return { success: false, error: error.message || 'Failed to save shift feedback.' };
   }
 }
 
-/**
- * Helper function to mark a booking as 'Reviewed' after instructor provides feedback
- * This updates the booking status from 'Attended' to 'Reviewed'
- */
 async function markShiftAsReviewed(shiftId: string, studentId: string): Promise<void> {
   try {
-    // Find the booking for this shift and student
-    const bookingsCollection = collection(firestore, 'shiftBookings');
-    const q = query(
-      bookingsCollection,
-      where('shiftId', '==', shiftId),
-      where('studentId', '==', studentId)
-    );
-    const querySnapshot = await getDocs(q);
+    const { data, error } = await supabase
+      .from('shift_bookings')
+      .select('id, status')
+      .eq('shift_id', shiftId)
+      .eq('student_id', studentId)
+      .single();
 
-    if (!querySnapshot.empty) {
-      const bookingDoc = querySnapshot.docs[0];
-      const bookingId = bookingDoc.id;
-      const bookingData = bookingDoc.data();
+    if (error || !data) return;
 
-      // Only update if status is 'Attended' (prevent overwriting other statuses)
-      if (bookingData.status === 'Attended') {
-        await updateBookingStatus(bookingId, 'Reviewed');
-        console.log(`Marked booking ${bookingId} as 'Reviewed'`);
-      }
+    if (data.status === 'attended') {
+      await updateBookingStatus(data.id, 'Reviewed');
     }
-  } catch (error) {
-    console.error('Error marking shift as reviewed:', error);
-    // Don't throw error - feedback was saved successfully, this is just a status update
+  } catch {
+    // Non-blocking status update
   }
 }
 
-/**
- * Get shift feedback for a specific student
- */
 export async function getShiftFeedbackForStudent(
   shiftId: string,
   instructorId: string,
@@ -339,36 +238,23 @@ export async function getShiftFeedbackForStudent(
   }
 
   try {
-    const feedbackCollection = collection(firestore, 'shiftFeedback');
-    const q = query(
-      feedbackCollection,
-      where('shiftId', '==', shiftId),
-      where('instructorId', '==', instructorId),
-      where('studentId', '==', studentId)
-    );
-    
-    const querySnapshot = await getDocs(q);
-    
-    if (querySnapshot.empty) {
-      return { success: true, data: undefined }; // No feedback yet
-    }
-    
-    // Return the first match (should only be one per shift-instructor-student combination)
-    const feedbackDoc = querySnapshot.docs[0];
-    const feedback = { id: feedbackDoc.id, ...feedbackDoc.data() } as ShiftFeedback;
-    
-    console.log(`Retrieved shift feedback for shift ${shiftId}, student ${studentId}`);
-    return { success: true, data: feedback };
+    const { data, error } = await supabase
+      .from('shift_feedback')
+      .select('id, shift_id, instructor_id, student_id, overall_feedback, performance_rating, areas_of_strength, areas_for_improvement, created_at, updated_at')
+      .eq('shift_id', shiftId)
+      .eq('instructor_id', instructorId)
+      .eq('student_id', studentId)
+      .limit(1)
+      .maybeSingle();
+
+    if (error) throw error;
+
+    return { success: true, data: data ? mapShiftFeedback(data as ShiftFeedbackRow) : undefined };
   } catch (error: any) {
-    console.error('Error retrieving shift feedback for student:', error);
-    return { success: false, error: error.message || 'Failed to retrieve shift feedback.' };
+    return { success: false, error: error.message || 'Failed to retrieve shift feedback for student.' };
   }
 }
 
-/**
- * Get all shift feedbacks for a shift (all students)
- * Used to check which students have been reviewed
- */
 export async function getAllShiftFeedbacks(
   shiftId: string,
   instructorId: string
@@ -378,25 +264,16 @@ export async function getAllShiftFeedbacks(
   }
 
   try {
-    const feedbackCollection = collection(firestore, 'shiftFeedback');
-    const q = query(
-      feedbackCollection,
-      where('shiftId', '==', shiftId),
-      where('instructorId', '==', instructorId)
-    );
-    
-    const querySnapshot = await getDocs(q);
-    const feedbacks: ShiftFeedback[] = [];
-    
-    querySnapshot.forEach((doc) => {
-      feedbacks.push({ id: doc.id, ...doc.data() } as ShiftFeedback);
-    });
-    
-    console.log(`Retrieved ${feedbacks.length} feedbacks for shift ${shiftId}`);
-    return { success: true, data: feedbacks };
+    const { data, error } = await supabase
+      .from('shift_feedback')
+      .select('id, shift_id, instructor_id, student_id, overall_feedback, performance_rating, areas_of_strength, areas_for_improvement, created_at, updated_at')
+      .eq('shift_id', shiftId)
+      .eq('instructor_id', instructorId);
+
+    if (error) throw error;
+
+    return { success: true, data: (data ?? []).map((row) => mapShiftFeedback(row as ShiftFeedbackRow)) };
   } catch (error: any) {
-    console.error('Error retrieving all shift feedbacks:', error);
     return { success: false, error: error.message || 'Failed to retrieve feedbacks.' };
   }
 }
-

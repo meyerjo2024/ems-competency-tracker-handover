@@ -62,7 +62,7 @@ This project represents work completed up to the point of development halt. The 
 - **SETUP.md** - Installation and configuration guide
 - **DEPLOYMENT.md** - Production deployment instructions
 - **USER_GUIDE.md** - End-user documentation for implemented features
-- **FIREBASE_SETUP_GUIDE.md** - Firebase project configuration
+- **SUPABASE_SETUP_GUIDE.md** - Firebase project configuration
 - **PROJECT_STATUS.md** - Detailed feature implementation status
 
 ## Getting Started
@@ -74,7 +74,7 @@ This project represents work completed up to the point of development halt. The 
 
 ### Quick Start
 1. Follow **SETUP.md** for detailed installation steps
-2. Create your own Firebase project (see **FIREBASE_SETUP_GUIDE.md**)
+2. Create your own Firebase project (see **SUPABASE_SETUP_GUIDE.md**)
 3. Configure environment variables
 4. Deploy Firebase security rules
 5. Start development server

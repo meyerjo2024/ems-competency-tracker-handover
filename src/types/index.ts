@@ -1,5 +1,5 @@
 // src/types/index.ts
-import type { Timestamp } from 'firebase/firestore';
+export type TimestampValue = Date | string | null;
 
 export interface PatientCareFormData {
   // Patient Assessment Tab - Call Information
@@ -87,12 +87,12 @@ export interface PatientCareFormData {
   isDraft?: boolean;
   isSubmitted?: boolean;
   submittedAt?: Date; // Client-side date for initial submission display
-  submittedAtTimestamp?: any; // Firestore server timestamp for final submission
+  submittedAtTimestamp?: TimestampValue;
   reviewStatus?: 'NotReviewed' | 'InProgress' | 'Reviewed';
   reviewedByInstructorId?: string;
-  reviewedAtTimestamp?: any; // Firestore server timestamp for review
-  createdAt?: any; // Firestore server timestamp
-  updatedAt?: any; // Firestore server timestamp
+  reviewedAtTimestamp?: TimestampValue;
+  createdAt?: TimestampValue;
+  updatedAt?: TimestampValue;
 }
 
 export interface VitalSignEntry {
@@ -515,7 +515,7 @@ export interface UserProfile {
   fullName: string;
   email: string;
   role: 'Student' | 'Instructor' | 'Administrator';
-  createdAt: any; // Firestore Timestamp 
+  createdAt: TimestampValue;
   approved?: boolean; // For instructor/admin approval flow
   avatar?: string; // Optional avatar URL
 }
@@ -534,9 +534,9 @@ export interface Shift {
   notes?: string;
   reviewStatus?: 'Pending' | 'InProgress' | 'Completed';
   instructorNotes?: string;
-  reviewedAt?: any; // Firestore timestamp for when shift review was completed
-  createdAt: any; 
-  updatedAt: any; 
+  reviewedAt?: TimestampValue;
+  createdAt: TimestampValue;
+  updatedAt: TimestampValue;
 }
 
 export interface ShiftFeedback {
@@ -548,8 +548,8 @@ export interface ShiftFeedback {
   performanceRating?: 'Excellent' | 'Good' | 'Satisfactory' | 'Needs Improvement';
   areasOfStrength?: string;
   areasForImprovement?: string;
-  createdAt: any; // Firestore server timestamp
-  updatedAt: any; // Firestore server timestamp
+  createdAt: TimestampValue;// Firestore server timestamp
+  updatedAt: TimestampValue;// Firestore server timestamp
 }
 
 export type ShiftBookingStatus = 'Booked' | 'CancelledByStudent' | 'CancelledByInstructor' | 'Attended' | 'Reviewed' | 'NoShow' | 'PendingApproval';
@@ -558,25 +558,26 @@ export interface ShiftBooking {
   id: string; // Firestore document ID for the booking itself
   shiftId: string; // ID of the Shift document
   studentId: string; // UID of the student
-  bookingTimestamp: any; // Firestore server timestamp
+  bookingTimestamp: TimestampValue;
   status: ShiftBookingStatus;
+  updatedAt?: TimestampValue;
   // Optionally, cancellationReason, attendedTimestamp, etc.
 }
 
 export interface FirestoreShift {
   id: string;
   title: string;
-  date: any; // Firestore Timestamp
-  startTime: any; // Firestore Timestamp
-  endTime: any; // Firestore Timestamp
+  date: TimestampValue;
+  startTime: TimestampValue;
+  endTime: TimestampValue;
   type: string;
   location: string;
   capacity: number;
   notes: string;
   instructorId: string;
   bookedCount: number;
-  createdAt: any; // Firestore Timestamp
-  updatedAt: any; // Firestore Timestamp
+  createdAt: TimestampValue;// Firestore Timestamp
+  updatedAt: TimestampValue;// Firestore Timestamp
 }
 
 export interface ClientShift {
@@ -595,14 +596,14 @@ export interface ClientShift {
   updatedAt: string; // ISO string
 }
 
-// Utility function to transform Firestore Timestamp to ISO string
+// Utility function to transform timestamp-like values to ISO string
 export function timestampToISO(timestamp: any): string {
   if (!timestamp) return '';
   
   // If it's already a string, return it
   if (typeof timestamp === 'string') return timestamp;
   
-  // If it's a Firestore Timestamp
+  // If it's an object with a toDate() function
   if (timestamp && typeof timestamp.toDate === 'function') {
     return timestamp.toDate().toISOString();
   }

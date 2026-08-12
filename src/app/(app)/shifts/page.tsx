@@ -32,8 +32,7 @@ import { getEncountersForShift } from '@/actions/patientCareFormActions';
 import { shiftTypeOptions } from '@/components/forms/patient-care-form/patient-care-form-constants';
 import type { Shift, ShiftBooking, UserProfile } from '@/types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { collection, doc, getDoc } from 'firebase/firestore';
-import { firestore } from '@/lib/firebase/config';
+import { getUserById } from '@/actions/userActions';
 
 type UpdateShiftInput = Partial<Omit<Shift, 'id' | 'createdAt' | 'updatedAt' | 'instructorId' | 'bookedCount'>>;
 
@@ -101,10 +100,9 @@ export default function ShiftsPage() {
 
     for (const instructorId of uniqueInstructorIds) {
       try {
-        const userDoc = await getDoc(doc(firestore, 'users', instructorId));
-        if (userDoc.exists()) {
-          const userData = userDoc.data() as UserProfile;
-          names[instructorId] = userData.fullName;
+        const userResult = await getUserById(instructorId);
+        if (userResult.success && userResult.data) {
+          names[instructorId] = userResult.data.fullName;
         }
       } catch (error) {
         console.error(`Error fetching instructor name for ${instructorId}:`, error);

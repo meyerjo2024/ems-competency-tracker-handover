@@ -1,15 +1,14 @@
-// src/context/AuthContext.tsx
 'use client';
 
 import * as React from 'react';
-import { firebaseAuth, firestore } from '@/lib/firebase/config';
-import { onAuthStateChanged, type User as FirebaseAuthUser, signOut as firebaseSignOut } from 'firebase/auth';
-import { doc, getDoc, type Timestamp } from 'firebase/firestore';
+import { supabase } from '@/lib/supabase/config';
+import type { User as SupabaseAuthUser } from '@supabase/supabase-js';
 import type { UserProfile } from '@/types';
+import { toAppRole } from '@/lib/supabase/mappers';
 
 interface AuthContextValue {
   currentUser: UserProfile | null;
-  firebaseUser: FirebaseAuthUser | null;
+  firebaseUser: SupabaseAuthUser | null;
   isLoading: boolean;
   error: string | null;
   signOut: () => Promise<void>;
@@ -17,76 +16,96 @@ interface AuthContextValue {
 
 const AuthContext = React.createContext<AuthContextValue | undefined>(undefined);
 
+type UserRow = {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+  role: string | null;
+  approved: boolean | null;
+  created_at: string | null;
+};
+
+function mapUserProfile(authUser: SupabaseAuthUser, row: UserRow): UserProfile {
+  return {
+    id: authUser.id,
+    email: row.email ?? authUser.email ?? '',
+    fullName: row.full_name ?? authUser.user_metadata?.full_name ?? 'User',
+    role: toAppRole(row.role),
+    approved: row.approved ?? true,
+    createdAt: row.created_at ? new Date(row.created_at) : new Date(),
+  };
+}
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = React.useState<UserProfile | null>(null);
-  const [firebaseUser, setFirebaseUser] = React.useState<FirebaseAuthUser | null>(null);
+  const [firebaseUser, setFirebaseUser] = React.useState<SupabaseAuthUser | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
   const signOut = async () => {
-    await firebaseSignOut(firebaseAuth);
+    await supabase.auth.signOut();
     setCurrentUser(null);
     setFirebaseUser(null);
   };
 
   React.useEffect(() => {
-    const unsubscribe = onAuthStateChanged(firebaseAuth, async (fbUser) => {
-      setIsLoading(true);
+    let mounted = true;
+
+    const hydrateUser = async (authUser: SupabaseAuthUser | null) => {
+      if (!mounted) return;
+
       setError(null);
-      
-      if (fbUser) {
-        setFirebaseUser(fbUser);
-        // Fetch user profile from Firestore
-        const userDocRef = doc(firestore, "users", fbUser.uid);
-        try {
-          console.log(`AuthContext: Firebase user ${fbUser.uid} authenticated. Attempting to fetch profile from Firestore path: users/${fbUser.uid}`);
-          const userDocSnap = await getDoc(userDocRef);
-          
-          if (userDocSnap.exists()) {
-            const userProfileData = userDocSnap.data() as Omit<UserProfile, 'id' | 'email'> & { createdAt: Timestamp };
-            console.log("AuthContext: User profile found:", userProfileData);
-            
-            // Check if the user is approved (for Instructors)
-            // Block unapproved instructors from system access
-            if (userProfileData.role === 'Instructor' && userProfileData.approved !== true) {
-              console.log('AuthContext: Unapproved instructor detected. Blocking access.');
-              setError('Your instructor account is pending administrator approval. You will be notified once approved.');
-              setCurrentUser(null);
-              setFirebaseUser(null);
-              // Sign out the unapproved instructor
-              await firebaseSignOut(firebaseAuth);
-              setIsLoading(false);
-              return;
-            }
-            
-            setCurrentUser({
-              id: fbUser.uid,
-              email: fbUser.email!, 
-              fullName: userProfileData.fullName,
-              role: userProfileData.role,
-              approved: userProfileData.approved,
-              createdAt: userProfileData.createdAt, 
-              // Avatar removed - using initials in Header component instead
-            });
-          } else {
-            console.warn(`AuthContext: No user profile found in Firestore for UID: ${fbUser.uid}`);
-            setError('User profile not found. Please contact support.');
-            setCurrentUser(null);
-          }
-        } catch (error: any) {
-          console.error(`AuthContext: Error fetching user profile from Firestore for UID ${fbUser.uid}:`, error);
-          setError('Failed to load user profile. Please try again.');
-          setCurrentUser(null);
-        }
-      } else {
-        console.log("AuthContext: No Firebase user found (logged out).");
+
+      if (!authUser) {
         setFirebaseUser(null);
         setCurrentUser(null);
+        setIsLoading(false);
+        return;
       }
+
+      setFirebaseUser(authUser);
+
+      const { data, error: profileError } = await supabase
+        .from('users')
+        .select('id, full_name, email, role, approved, created_at')
+        .eq('id', authUser.id)
+        .single<UserRow>();
+
+      if (profileError || !data) {
+        setError('User profile not found. Please contact support.');
+        setCurrentUser(null);
+        setIsLoading(false);
+        return;
+      }
+
+      const profile = mapUserProfile(authUser, data);
+
+      if (profile.role === 'Instructor' && profile.approved !== true) {
+        setError('Your instructor account is pending administrator approval. You will be notified once approved.');
+        setCurrentUser(null);
+        setFirebaseUser(null);
+        await supabase.auth.signOut();
+        setIsLoading(false);
+        return;
+      }
+
+      setCurrentUser(profile);
       setIsLoading(false);
+    };
+
+    supabase.auth.getSession().then(({ data }) => {
+      hydrateUser(data.session?.user ?? null);
     });
 
-    return () => unsubscribe();
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsLoading(true);
+      hydrateUser(session?.user ?? null);
+    });
+
+    return () => {
+      mounted = false;
+      authListener.subscription.unsubscribe();
+    };
   }, []);
 
   const value = { currentUser, firebaseUser, isLoading, error, signOut };

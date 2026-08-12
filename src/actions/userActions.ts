@@ -1,30 +1,43 @@
-// src/actions/userActions.ts
 'use client';
 
-import { firestore } from '@/lib/firebase/config';
-import { collection, doc, updateDoc, getDocs, query, orderBy } from 'firebase/firestore';
+import { supabase } from '@/lib/supabase/config';
 import type { UserProfile } from '@/types';
+import { toAppRole } from '@/lib/supabase/mappers';
 
-/**
- * Update a user's approval status
- * Only admins should call this function (enforced by Firestore rules)
- */
-export async function updateUserApproval(
-  userId: string,
-  approved: boolean
-): Promise<{ success: boolean; error?: string }> {
+type UserRow = {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+  role: string | null;
+  approved: boolean | null;
+  created_at: string | null;
+};
+
+function mapUser(row: UserRow): UserProfile {
+  return {
+    id: row.id,
+    fullName: row.full_name ?? '',
+    email: row.email ?? '',
+    role: toAppRole(row.role),
+    approved: row.approved ?? true,
+    createdAt: row.created_at ? new Date(row.created_at) : new Date(),
+  };
+}
+
+export async function updateUserApproval(userId: string, approved: boolean): Promise<{ success: boolean; error?: string }> {
   try {
     if (!userId) {
       return { success: false, error: 'User ID is required' };
     }
 
-    const userRef = doc(firestore, 'users', userId);
-    await updateDoc(userRef, { approved });
+    const { error } = await supabase.from('users').update({ approved }).eq('id', userId);
 
-    console.log(`Updated user ${userId} approval status to: ${approved}`);
+    if (error) {
+      throw error;
+    }
+
     return { success: true };
   } catch (error: any) {
-    console.error('Error updating user approval:', error);
     return {
       success: false,
       error: error.message || 'Failed to update approval status',
@@ -32,37 +45,20 @@ export async function updateUserApproval(
   }
 }
 
-/**
- * Get all users from Firestore
- * Returns users sorted by creation date (newest first)
- */
-export async function getAllUsers(): Promise<{
-  success: boolean;
-  data?: UserProfile[];
-  error?: string;
-}> {
+export async function getAllUsers(): Promise<{ success: boolean; data?: UserProfile[]; error?: string }> {
   try {
-    const usersCollection = collection(firestore, 'users');
-    const q = query(usersCollection, orderBy('createdAt', 'desc'));
-    const querySnapshot = await getDocs(q);
+    const { data, error } = await supabase
+      .from('users')
+      .select('id, full_name, email, role, approved, created_at')
+      .order('created_at', { ascending: false });
 
-    const users: UserProfile[] = [];
-    querySnapshot.forEach((doc) => {
-      const data = doc.data();
-      users.push({
-        id: doc.id,
-        fullName: data.fullName || '',
-        email: data.email || '',
-        role: data.role || 'Student',
-        approved: data.approved ?? true, // Default to true if not set
-        createdAt: data.createdAt,
-      });
-    });
+    if (error) {
+      throw error;
+    }
 
-    console.log(`Fetched ${users.length} users from Firestore`);
+    const users = (data ?? []).map((row) => mapUser(row as UserRow));
     return { success: true, data: users };
   } catch (error: any) {
-    console.error('Error fetching users:', error);
     return {
       success: false,
       error: error.message || 'Failed to fetch users',
@@ -70,3 +66,27 @@ export async function getAllUsers(): Promise<{
   }
 }
 
+export async function getUserById(userId: string): Promise<{ success: boolean; data?: UserProfile; error?: string }> {
+  if (!userId) {
+    return { success: false, error: 'User ID is required' };
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('id, full_name, email, role, approved, created_at')
+      .eq('id', userId)
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    return { success: true, data: mapUser(data as UserRow) };
+  } catch (error: any) {
+    return {
+      success: false,
+      error: error.message || 'Failed to fetch user',
+    };
+  }
+}

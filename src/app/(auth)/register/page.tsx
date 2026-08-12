@@ -1,4 +1,3 @@
-// src/app/(auth)/register/page.tsx
 'use client';
 
 import * as React from 'react';
@@ -13,13 +12,10 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Stethoscope, UserPlus } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { firebaseAuth, firestore } from '@/lib/firebase/config';
-import { createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp, type Timestamp } from 'firebase/firestore';
-import type { UserProfile } from '@/types';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
-
+import { supabase } from '@/lib/supabase/config';
+import { toDatabaseRole } from '@/lib/supabase/mappers';
 
 const registerSchema = z
   .object({
@@ -31,7 +27,7 @@ const registerSchema = z
   })
   .refine((data) => data.password === data.confirmPassword, {
     message: "Passwords don't match.",
-    path: ['confirmPassword'], // path of error
+    path: ['confirmPassword'],
   });
 
 type RegisterFormInputs = z.infer<typeof registerSchema>;
@@ -42,7 +38,6 @@ export default function RegisterPage() {
   const router = useRouter();
   const { currentUser, isLoading: authLoading } = useAuth();
 
-  // Redirect if already logged in
   React.useEffect(() => {
     if (!authLoading && currentUser) {
       router.push('/dashboard');
@@ -64,37 +59,44 @@ export default function RegisterPage() {
   const onSubmit: SubmitHandler<RegisterFormInputs> = async (data) => {
     setIsLoading(true);
     try {
-      const userCredential = await createUserWithEmailAndPassword(firebaseAuth, data.email, data.password);
-      const user = userCredential.user;
-      console.log('Registered user with Firebase Auth:', user.uid);
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+        email: data.email,
+        password: data.password,
+        options: {
+          data: { full_name: data.fullName },
+        },
+      });
 
-      // Send email verification
-      await sendEmailVerification(user);
-      console.log('Verification email sent to:', user.email);
+      if (signUpError) {
+        throw signUpError;
+      }
 
-      const userProfileData: Omit<UserProfile, 'id' | 'email' | 'createdAt'> & { createdAt: any, approved: boolean, email: string } = {
-        fullName: data.fullName,
-        email: user.email!, 
-        role: data.role as 'Student' | 'Instructor', 
-        approved: data.role === 'Student', 
-        createdAt: serverTimestamp(),
-      };
+      const authUser = signUpData.user;
+      if (!authUser) {
+        throw new Error('Unable to create user account.');
+      }
 
-      await setDoc(doc(firestore, "users", user.uid), userProfileData);
-      console.log('User profile created in Firestore for UID:', user.uid);
+      const { error: profileError } = await supabase.from('users').upsert({
+        id: authUser.id,
+        full_name: data.fullName,
+        email: data.email,
+        role: toDatabaseRole(data.role),
+        approved: data.role === 'Student',
+      });
+
+      if (profileError) {
+        throw profileError;
+      }
 
       toast({
         title: 'Registration Successful!',
-        description: `Account created for ${data.email}. A verification email has been sent. Please check your inbox.`,
+        description: `Account created for ${data.email}. Please check your inbox to verify your email.`,
       });
-      
-      // Small delay to ensure Firestore write completes before navigation
-      await new Promise(resolve => setTimeout(resolve, 500));
+
       router.push('/login');
     } catch (error: any) {
-      console.error('Registration error:', error);
       let errorMessage = error.message || 'An unexpected error occurred.';
-      if (error.code === 'auth/email-already-in-use') {
+      if (errorMessage.toLowerCase().includes('already registered')) {
         errorMessage = 'This email address is already in use. Please try a different email or login.';
       }
       toast({
@@ -118,45 +120,22 @@ export default function RegisterPage() {
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="fullName">Full Name</Label>
-            <Input
-              id="fullName"
-              placeholder="John Doe"
-              {...register('fullName')}
-              className={errors.fullName ? 'border-destructive' : ''}
-            />
+            <Input id="fullName" placeholder="John Doe" {...register('fullName')} className={errors.fullName ? 'border-destructive' : ''} />
             {errors.fullName && <p className="text-sm text-destructive">{errors.fullName.message}</p>}
           </div>
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              placeholder="you@example.com"
-              {...register('email')}
-              className={errors.email ? 'border-destructive' : ''}
-            />
+            <Input id="email" type="email" placeholder="you@example.com" {...register('email')} className={errors.email ? 'border-destructive' : ''} />
             {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
           </div>
           <div className="space-y-2">
             <Label htmlFor="password">Password</Label>
-            <Input
-              id="password"
-              type="password"
-              placeholder="••••••••"
-              {...register('password')}
-              className={errors.password ? 'border-destructive' : ''}
-            />
+            <Input id="password" type="password" placeholder="••••••••" {...register('password')} className={errors.password ? 'border-destructive' : ''} />
             {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
           </div>
           <div className="space-y-2">
             <Label htmlFor="confirmPassword">Confirm Password</Label>
-            <Input
-              id="confirmPassword"
-              type="password"
-              placeholder="••••••••"
-              {...register('confirmPassword')}
-              className={errors.confirmPassword ? 'border-destructive' : ''}
-            />
+            <Input id="confirmPassword" type="password" placeholder="••••••••" {...register('confirmPassword')} className={errors.confirmPassword ? 'border-destructive' : ''} />
             {errors.confirmPassword && <p className="text-sm text-destructive">{errors.confirmPassword.message}</p>}
           </div>
           <div className="space-y-2">
@@ -179,11 +158,7 @@ export default function RegisterPage() {
             {errors.role && <p className="text-sm text-destructive">{errors.role.message}</p>}
           </div>
           <Button type="submit" className="w-full bg-primary hover:bg-primary/90" disabled={isLoading}>
-            {isLoading ? (
-              <UserPlus className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <UserPlus className="mr-2 h-4 w-4" />
-            )}
+            {isLoading ? <UserPlus className="mr-2 h-4 w-4 animate-spin" /> : <UserPlus className="mr-2 h-4 w-4" />}
             Register
           </Button>
         </form>
