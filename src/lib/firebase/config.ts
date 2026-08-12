@@ -1,7 +1,7 @@
 // src/lib/firebase/config.ts
 import { initializeApp, getApp, getApps, type FirebaseApp } from 'firebase/app';
-import { getAuth, type Auth } from 'firebase/auth';
-import { getFirestore, type Firestore } from 'firebase/firestore';
+import { getAuth, connectAuthEmulator, type Auth } from 'firebase/auth';
+import { getFirestore, connectFirestoreEmulator, type Firestore } from 'firebase/firestore';
 
 // Your web app's Firebase configuration
 // IMPORTANT: Ensure these environment variables are correctly set in your .env file
@@ -29,5 +29,16 @@ if (!getApps().length) {
 
 const firebaseAuth: Auth = getAuth(firebaseApp);
 const firestore: Firestore = getFirestore(firebaseApp);
+
+// Point the SDKs at local Firebase emulators for local development/demo use
+// (no real Firebase project required). Enable with NEXT_PUBLIC_USE_FIREBASE_EMULATORS=true.
+if (process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATORS === 'true') {
+  const globalWithEmulatorFlag = globalThis as unknown as { __firebaseEmulatorsConnected?: boolean };
+  if (!globalWithEmulatorFlag.__firebaseEmulatorsConnected) {
+    connectAuthEmulator(firebaseAuth, 'http://127.0.0.1:9099', { disableWarnings: true });
+    connectFirestoreEmulator(firestore, '127.0.0.1', 8080);
+    globalWithEmulatorFlag.__firebaseEmulatorsConnected = true;
+  }
+}
 
 export { firebaseApp, firebaseAuth, firestore };

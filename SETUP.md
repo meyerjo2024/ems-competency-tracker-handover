@@ -4,6 +4,27 @@
 
 This is a development halt handover. The system has core functionality working but is not feature-complete. Please review PROJECT_STATUS.md for details on what's implemented vs. what's incomplete.
 
+## Quick Start Without a Firebase Project (Emulators)
+
+To try the app locally without creating a real Firebase project, you can run it against the
+Firebase Emulator Suite (Auth + Firestore), which is already configured in `firebase.json`:
+
+```bash
+npm install -g firebase-tools   # if not already installed
+npm install
+cp .env.local.example .env.local
+# Edit .env.local and set NEXT_PUBLIC_USE_FIREBASE_EMULATORS=true
+# (the other NEXT_PUBLIC_FIREBASE_* values can stay as placeholders)
+
+firebase emulators:start --only auth,firestore   # in one terminal
+npm run dev                                       # in another terminal
+```
+
+Then visit `http://localhost:9002`, register an account, and it will be created in the local
+emulator (viewable at `http://127.0.0.1:4000`) instead of a real Firebase project. This is ideal
+for demos and local development; switch `NEXT_PUBLIC_USE_FIREBASE_EMULATORS` to `false` (and fill
+in real Firebase config) when you're ready to use a production project.
+
 ## Prerequisites
 
 - Node.js v18 or later
