@@ -8,6 +8,7 @@ This guide will help you set up and demo the EMS Competency Tracker application 
 - Node.js v18 or later installed
 - Git installed
 - A terminal/command line interface
+- A Firebase project (free tier works fine)
 
 ### Step 1: Clone the Repository
 
@@ -22,40 +23,71 @@ cd ems-competency-tracker-handover
 npm install
 ```
 
-### Step 3: Set Up Environment (Local Mode)
+### Step 3: Set Up Firebase Project
 
-Copy the example environment file:
+1. Go to [https://console.firebase.google.com](https://console.firebase.google.com)
+2. Click "Create a project" (or use an existing one)
+3. Name it something like "EMS-Demo"
+4. Click "Create project"
+5. Wait for it to complete, then click "Continue"
+
+### Step 4: Enable Firestore Database
+
+1. In Firebase Console, click "Firestore Database" (left sidebar)
+2. Click "Create database"
+3. Choose **"Start in test mode"** (for demo purposes)
+4. Select a region (us-central1 recommended)
+5. Click "Create"
+
+### Step 5: Enable Authentication
+
+1. Click "Authentication" (left sidebar)
+2. Click "Get Started"
+3. Click "Email/Password"
+4. Toggle **"Enable"** on
+5. Click "Save"
+
+### Step 6: Get Your Firebase Config
+
+1. Click the ⚙️ (Settings) icon → "Project settings"
+2. Scroll down to "Your apps"
+3. Click the `</>` (Web) app, or create one if needed
+4. Copy the Firebase config object (should look like below)
+
+### Step 7: Configure Environment File
 
 ```bash
+# Copy the example file
 cp .env.local.example .env.local
-```
 
-Edit `.env.local` and set:
-
-```env
-# Supabase Configuration (get these from your Supabase project)
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+# Edit .env.local with your Firebase credentials from Step 6
+# It should look like:
+NEXT_PUBLIC_FIREBASE_API_KEY=AIzaSy...
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=your-project-id
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your-project.appspot.com
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=123456789
+NEXT_PUBLIC_FIREBASE_APP_ID=1:123456789:web:abcdef123456
+NEXT_PUBLIC_USE_FIREBASE_EMULATORS=false
 
 # Optional: AI features
 GOOGLE_GENAI_API_KEY=your-api-key
 ```
 
-**Don't have Supabase yet?** See **Option B: Using Firebase Emulators** below.
-
-### Step 4: Start the Development Server
+### Step 8: Start the Development Server
 
 ```bash
-npm run dev
+# Use a different port if 9002 is in use
+npm run dev -- -p 3000
 ```
 
-The application will start at `http://localhost:9002`
+The application will start at **`http://localhost:3000`**
 
-### Step 5: Create Test Accounts
+### Step 9: Create Test Accounts
 
 #### Creating a Student Account
 
-1. Go to `http://localhost:9002/register`
+1. Go to `http://localhost:3000/register`
 2. Fill in the form:
    - **Full Name:** `John Student`
    - **Email:** `student@demo.local`
@@ -66,7 +98,7 @@ The application will start at `http://localhost:9002`
 
 #### Creating an Instructor Account
 
-1. Go to `http://localhost:9002/register`
+1. Go to `http://localhost:3000/register`
 2. Fill in the form:
    - **Full Name:** `Jane Instructor`
    - **Email:** `instructor@demo.local`
@@ -83,11 +115,15 @@ The application will start at `http://localhost:9002`
    - **Password:** `demo12345`
    - **Role:** Select "Administrator"
 
-2. Open your Supabase console or database management tool
-3. Find the user record in the `users` table
-4. Update the following columns:
-   - `role` = `'Administrator'`
-   - `approved` = `true`
+2. Set up as Admin (in Firestore):
+   - Open your [Firebase Console](https://console.firebase.google.com)
+   - Go to Firestore Database → Collections
+   - Find the `users` collection
+   - Click on the admin user document
+   - Edit the document and set:
+     - `role` = `"Administrator"`
+     - `approved` = `true`
+   - Click "Update"
 
 ## Demo Credentials Quick Reference
 
@@ -96,6 +132,37 @@ The application will start at `http://localhost:9002`
 | Student | student@demo.local | demo12345 | View shifts, submit patient encounters |
 | Instructor | instructor@demo.local | demo12345 | Create shifts, review student work |
 | Administrator | admin@demo.local | demo12345 | Manage users, approve instructors |
+
+## Troubleshooting Registration Errors
+
+### Error: "Firebase: Error (auth/configuration-not-found)"
+
+**Solution:** Your `.env.local` is missing Firebase credentials.
+
+```bash
+# Make sure you have:
+1. Created a Firebase project
+2. Enabled Email/Password authentication
+3. Copied your Firebase config to .env.local
+4. Restarted the development server after editing .env.local
+
+# Restart the server:
+npm run dev -- -p 3000
+```
+
+### Error: "Port 9002 already in use"
+
+**Solution:** Use a different port
+
+```bash
+npm run dev -- -p 3000
+```
+
+Then access at `http://localhost:3000`
+
+### Error: "Permission denied" in Firestore
+
+**Solution:** Firestore security rules need to allow registration in test mode. In test mode, all reads/writes are allowed. Make sure you're in "Start in test mode" when creating the database.
 
 ## Demo Workflows
 
@@ -216,58 +283,52 @@ The application will start at `http://localhost:9002`
 - **Feedback workflow:** Submit encounters and receive instructor feedback
 - **Mobile responsiveness:** Open the app on a phone/tablet
 
-## Troubleshooting
+## Getting Firebase Credentials (Step-by-Step)
 
-### Application won't start
+1. Open [Firebase Console](https://console.firebase.google.com)
+2. Click on your project
+3. Click ⚙️ (Settings) → "Project settings"
+4. Scroll to "Your apps" section
+5. Find or create your web app (click `</>` icon)
+6. Copy the config object that looks like:
 
-```bash
-# Clear cache and reinstall
-rm -rf node_modules package-lock.json
-npm install
-npm run dev
+```javascript
+const firebaseConfig = {
+  apiKey: "AIzaSy...",
+  authDomain: "your-project.firebaseapp.com",
+  projectId: "your-project-id",
+  storageBucket: "your-project.appspot.com",
+  messagingSenderId: "123456789",
+  appId: "1:123456789:web:abcdef"
+};
 ```
 
-### Port 9002 already in use
-
-Either:
-1. Kill the process using port 9002, or
-2. Change port in package.json: `"dev": "next dev -p 3000"`
-
-### Environment variables not loading
-
-1. Verify `.env.local` exists in project root (not in `src/`)
-2. Restart dev server after editing `.env.local`
-3. Check that variables start with `NEXT_PUBLIC_` for client-side access
-
-### Type errors on startup
-
-```bash
-npm run typecheck
-```
-
-If errors persist, see TypeScript errors and fix the issues, then restart dev server.
-
-### Authentication not working
-
-1. Verify Supabase credentials in `.env.local`
-2. Check Supabase project is accessible
-3. Ensure row-level security (RLS) policies are enabled but allow registration
-4. Check browser console for specific auth errors
+7. Use these values in your `.env.local`:
+   - `apiKey` → `NEXT_PUBLIC_FIREBASE_API_KEY`
+   - `authDomain` → `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`
+   - `projectId` → `NEXT_PUBLIC_FIREBASE_PROJECT_ID`
+   - `storageBucket` → `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`
+   - `messagingSenderId` → `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`
+   - `appId` → `NEXT_PUBLIC_FIREBASE_APP_ID`
 
 ## Environment File Template
 
-Create a `.env.local` file with:
+Create a `.env.local` file with (fill in your Firebase values):
 
 ```env
-# Supabase Configuration
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+# Firebase Configuration (from Firebase Console)
+NEXT_PUBLIC_FIREBASE_API_KEY=AIzaSy...
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=your-project-id
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your-project.appspot.com
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=123456789
+NEXT_PUBLIC_FIREBASE_APP_ID=1:123456789:web:abcdef
 
 # Optional: AI-powered narrative assistance
 GOOGLE_GENAI_API_KEY=your-google-ai-key
 
-# Optional: Change development port
-# Set in package.json "dev" script if needed
+# Optional: Use Firebase Emulators instead of real Firebase
+NEXT_PUBLIC_USE_FIREBASE_EMULATORS=false
 ```
 
 ## Documentation Files
@@ -277,7 +338,7 @@ For more detailed information, see:
 - **SETUP.md** - Installation and configuration
 - **USER_GUIDE.md** - End-user documentation
 - **DEPLOYMENT.md** - Production deployment
-- **SUPABASE_SETUP_GUIDE.md** - Supabase project setup
+- **FIREBASE_SETUP_GUIDE.md** - Detailed Firebase setup
 - **PROJECT_STATUS.md** - Feature implementation status
 
 ## Next Steps After Demo
@@ -286,7 +347,7 @@ For more detailed information, see:
 2. **Read documentation** - Check PROJECT_STATUS.md for what's implemented
 3. **Customize** - Modify shifts, encounter form fields, or UI as needed
 4. **Deploy** - Follow DEPLOYMENT.md to deploy to production
-5. **Database setup** - Set up PostgreSQL/Supabase for production use
+5. **Database setup** - Set up Firestore rules for production use
 
 ## Support
 
@@ -295,7 +356,8 @@ If you encounter issues:
 1. Check the troubleshooting section above
 2. Review console logs (browser DevTools F12)
 3. Check SETUP.md for common issues
-4. Review the specific documentation files listed above
+4. Verify your Firebase credentials in `.env.local`
+5. Make sure Firestore Database is in "test mode"
 
 ---
 
