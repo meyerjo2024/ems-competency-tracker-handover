@@ -55,7 +55,7 @@ This project represents work completed up to the point of development halt. The 
 - **Authentication:** Firebase Auth
 - **UI Framework:** Tailwind CSS + Shadcn UI
 - **AI Integration:** Google Genkit (Gemini 2.0 Flash)
-- **Deployment:** Vercel-ready
+- **Deployment:** Firebase Hosting
 
 ## Documentation
 

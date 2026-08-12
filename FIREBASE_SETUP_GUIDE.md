@@ -108,7 +108,7 @@ You should see:
 1. Click on **"Settings"** tab
 2. Scroll to **"Authorized domains"**
 3. Should see `localhost` already added
-4. Later, add your Vercel domain here (e.g., `your-app.vercel.app`)
+4. Later, add your Firebase Hosting domain here (e.g., `your-project.firebaseapp.com`)
 
 ---
 
@@ -207,7 +207,7 @@ Press **Enter** to continue.
 - **Answer:** `No` (Next.js handles routing)
 
 **Question:** Set up automatic builds and deploys with GitHub?
-- **Answer:** `No` (using Vercel)
+- **Answer:** Your choice (configure based on your preference)
 
 ### Step 5.8: Verify Initialization
 
@@ -232,7 +232,7 @@ You should see files created:
 ### Step 6.2: Register App
 
 1. **App nickname:** Enter `EMS Competency Tracker Web`
-2. **Firebase Hosting:** Leave unchecked (using Vercel)
+2. **Firebase Hosting:** Leave unchecked (using Firebase Hosting separately)
 3. Click **"Register app"**
 
 ### Step 6.3: Copy Configuration
@@ -571,7 +571,7 @@ Before going to production:
 3. Find your Firebase API key
 4. Click **"Restrict key"**
 5. Add application restrictions (HTTP referrers)
-6. Add your Vercel domain
+6. Add your Firebase Hosting domain
 
 ---
 
@@ -647,7 +647,7 @@ Before moving to M1, verify:
 
 ## **Part 16: Next Steps**
 
- Firebase setup complete!
+Firebase setup complete!
 
 **Now you can:**
 
@@ -717,5 +717,4 @@ If you encounter issues not covered in troubleshooting:
 
 ---
 
-** Congratulations!** Your Firebase project is now set up and ready for development.
-
+**Congratulations!** Your Firebase project is now set up and ready for development.

@@ -12,14 +12,12 @@ Before deploying to production, please note:
 - [ ] Ensure Firebase rules are production-ready
 - [ ] Have backup and rollback plan
 
-## Vercel Deployment (Recommended)
+## Firebase Hosting Deployment (Recommended)
 
 ### Prerequisites
-
-- Vercel account (free tier available)
+- Firebase CLI installed
+- Firebase project configured
 - GitHub account
-- Firebase project fully configured
-- All environment variables ready
 
 ### Step 1: Prepare Repository
 
@@ -33,23 +31,34 @@ git remote add origin [your-github-repo-url]
 git push -u origin main
 ```
 
-### Step 2: Connect to Vercel
+### Step 2: Build the Application
 
-1. Go to [vercel.com](https://vercel.com)
-2. Sign in with GitHub
-3. Click "Add New Project"
-4. Import your GitHub repository
-5. Configure project settings:
-   - **Framework Preset:** Next.js
-   - **Root Directory:** ./
-   - **Build Command:** `npm run build`
-   - **Output Directory:** .next
+```bash
+# Install dependencies
+npm install
 
-### Step 3: Configure Environment Variables
+# Build the application
+npm run build
+```
 
-In Vercel dashboard, go to **Settings → Environment Variables**
+### Step 3: Initialize Firebase Hosting
 
-Add all variables from your `.env.local`:
+```bash
+# Login to Firebase
+firebase login
+
+# Initialize Firebase (if not already done)
+firebase init hosting
+```
+
+When prompted:
+- **Public directory:** `out` (for static export) or `.next/public`
+- **Single-page app:** No (Next.js handles routing)
+- **Automatic deploys with GitHub:** Choose based on your preference
+
+### Step 4: Configure Environment Variables
+
+Create a `.env.production` file with:
 
 ```
 NEXT_PUBLIC_FIREBASE_API_KEY=your_api_key
@@ -61,25 +70,32 @@ NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id
 GOOGLE_GENAI_API_KEY=your_google_ai_key (optional)
 ```
 
-**Important:** Set these for all environments (Production, Preview, Development)
+**Important:** Only `NEXT_PUBLIC_*` variables will be available in the browser.
 
-### Step 4: Deploy
+### Step 5: Deploy
 
-1. Click "Deploy"
-2. Wait for build to complete (2-5 minutes)
-3. Vercel will provide a deployment URL
+```bash
+# Deploy to Firebase Hosting
+firebase deploy --only hosting
+```
 
-### Step 5: Configure Firebase Authorized Domains
+You should see:
+```
+✔ Deploy complete!
+✔ Hosting URL: https://your-project.firebaseapp.com
+```
+
+### Step 6: Configure Firebase Authorized Domains
 
 1. Go to Firebase Console → Authentication → Settings
 2. Scroll to "Authorized domains"
 3. Click "Add domain"
-4. Add your Vercel domain (e.g., `your-app.vercel.app`)
+4. Add your Firebase Hosting domain (e.g., `your-project.firebaseapp.com`)
 5. Save changes
 
-### Step 6: Test Production Deployment
+### Step 7: Test Production Deployment
 
-- [ ] Visit your Vercel URL
+- [ ] Visit your Firebase Hosting URL
 - [ ] Test user registration
 - [ ] Test login
 - [ ] Test student features
@@ -88,39 +104,13 @@ GOOGLE_GENAI_API_KEY=your_google_ai_key (optional)
 - [ ] Check browser console for errors
 - [ ] Test on mobile devices
 
-### Step 7: Custom Domain (Optional)
+### Step 8: Custom Domain (Optional)
 
-1. In Vercel dashboard, go to **Settings → Domains**
-2. Add your custom domain
-3. Configure DNS records as instructed
-4. Add custom domain to Firebase authorized domains
-
-## Alternative Deployment: Firebase Hosting
-
-### Prerequisites
-- Firebase CLI installed
-- Firebase project configured
-
-### Steps
-
-```bash
-# Build the application
-npm run build
-
-# Initialize Firebase Hosting (if not already done)
-firebase init hosting
-
-# Configure firebase.json
-# Set public directory to: out
-# Configure as single-page app: No
-
-# Deploy
-firebase deploy --only hosting
-```
-
-### Post-Deployment
-- Add Firebase hosting domain to authorized domains
-- Test thoroughly
+1. In Firebase Console, go to **Hosting**
+2. Click **"Add custom domain"**
+3. Enter your custom domain
+4. Follow DNS configuration instructions
+5. Add custom domain to Firebase authorized domains
 
 ## Alternative Deployment: Self-Hosted
 
@@ -175,7 +165,7 @@ server {
 
 ### 3. Monitoring Setup
 - Set up Firebase usage alerts
-- Monitor Vercel analytics
+- Monitor Firebase performance
 - Set up error tracking (optional: Sentry)
 
 ### 4. Backup Strategy
@@ -185,8 +175,8 @@ server {
 
 ## Troubleshooting
 
-### Build Fails on Vercel
-- Check build logs for specific errors
+### Build Fails on Firebase Hosting
+- Check build logs: `firebase deploy --only hosting`
 - Verify all dependencies in package.json
 - Ensure TypeScript compiles locally
 - Check for environment-specific code
@@ -207,7 +197,7 @@ server {
 
 ### Performance
 - Next.js automatically optimizes builds
-- Consider enabling Vercel Analytics
+- Firebase Hosting serves content via CDN
 - Monitor Firebase usage and costs
 
 ### Security
@@ -218,7 +208,7 @@ server {
 
 ### Scalability
 - Firebase Firestore scales automatically
-- Vercel scales automatically
+- Firebase Hosting scales automatically
 - Monitor usage and upgrade plans as needed
 
 ### Maintenance
@@ -233,11 +223,7 @@ server {
 - Firestore: 50K reads/day, 20K writes/day
 - Authentication: Unlimited
 - Storage: 1GB
-
-### Vercel (Free Tier)
-- 100GB bandwidth/month
-- Unlimited deployments
-- Automatic SSL
+- Hosting: 10GB storage, 360MB/day transfer
 
 **Note:** Monitor usage and upgrade plans as needed.
 
@@ -246,11 +232,11 @@ server {
 ## Support
 
 For deployment issues:
-1. Check Vercel deployment logs
+1. Check Firebase Hosting deploy logs
 2. Check Firebase Console for errors
 3. Review browser console for client errors
 4. Check this documentation for troubleshooting steps
 
 ---
 
-**Remember:** This is work-in-progress code. Test thoroughly before production use
+**Remember:** This is work-in-progress code. Test thoroughly before production use.
